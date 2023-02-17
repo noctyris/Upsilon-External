@@ -81,16 +81,62 @@ void gb_error(struct gb_s *gb, const enum gb_error_e gb_err, const uint16_t val)
   
   // TODO: Handle errors.
 }
+const uint16_t palette_peanut_GB[4] = {0x9DE1, 0x8D61, 0x3306, 0x09C1};
+const uint16_t palette_original[4] = {0x8F80, 0x24CC, 0x4402, 0x0A40};
+const uint16_t palette_gray[4] = {0xFFFF, 0xAD55, 0x52AA, 0x0000};
+const uint16_t palette_gray_negative[4] = {0x0000, 0x52AA, 0xAD55, 0xFFFF};
+const uint16_t * palette = palette_peanut_GB;
 
-void lcd_draw_line(struct gb_s *gb, const uint8_t pixels[LCD_WIDTH], const uint_fast8_t line) {
+uint16_t color_from_gb_pixel(uint8_t gb_pixel) {
+    uint8_t gb_color = gb_pixel & 0x3;
+    return palette[gb_color];
+}
+
+void lcd_draw_line_centered(struct gb_s *gb, const uint8_t pixels[LCD_WIDTH], const uint_fast8_t line) {
   struct priv_t *priv = gb->direct.priv;
-  const uint16_t palette[] = { 0x9DE1, 0x8D61, 0x3306, 0x09C1 };
 
   for(unsigned int x = 0; x < LCD_WIDTH; x++) {
-    priv->line_buffer[x] = palette[pixels[x] & 3];
+    priv->line_buffer[x] = color_from_gb_pixel(pixels[x]);
   }
-  
+
   extapp_pushRect((NW_LCD_WIDTH - LCD_WIDTH) / 2, (NW_LCD_HEIGHT - LCD_HEIGHT) / 2 + line, LCD_WIDTH, 1, priv->line_buffer);
+}
+
+static void lcd_draw_line_maximized(struct gb_s * gb, const uint8_t * input_pixels, const uint_fast8_t line) {
+  // Nearest neighbor scaling of a 160x144 texture to a 320x240 resolution
+  // Horizontally, we just double
+  uint16_t output_pixels[2*LCD_WIDTH];
+  for (int i=0; i<LCD_WIDTH; i++) {
+    uint16_t color = color_from_gb_pixel(input_pixels[i]);
+    output_pixels[2*i] = color;
+    output_pixels[2*i+1] = color;
+  }
+  // Vertically, we want to scale by a 5/3 ratio. So we need to make 5 lines out of three:  we double two lines out of three.
+  uint16_t y = (5*line)/3;
+  extapp_pushRect(0, y, 2*LCD_WIDTH, 1, output_pixels);
+  if (line%3 != 0) {
+    extapp_pushRect(0, y+1, 2*LCD_WIDTH, 1, output_pixels);
+  }
+}
+
+static void lcd_draw_line_maximized_ratio(struct gb_s * gb, const uint8_t * input_pixels, const uint_fast8_t line) {
+  // Nearest neighbor scaling of a 160x144 texture to a 266x240 resolution (to keep the ratio)
+  // Horizontally, we multiply by 1.66 (160*1.66 = 266)
+  uint16_t output_pixels[266];
+  for (int i=0; i<LCD_WIDTH; i++) {
+    uint16_t color = color_from_gb_pixel(input_pixels[i]);
+    // We can't use floats, so we use a fixed point representation
+    output_pixels[166*i/100] = color;
+    output_pixels[166*i/100+1] = color;
+    output_pixels[166*i/100+2] = color;
+  }
+
+  // Vertically, we want to scale by a 5/3 ratio. So we need to make 5 lines out of three:  we double two lines out of three.
+  uint16_t y = (5*line)/3;
+  extapp_pushRect((NW_LCD_WIDTH - 266) / 2, y, 266, 1, output_pixels);
+  if (line%3 != 0) {
+    extapp_pushRect((NW_LCD_WIDTH - 266) / 2, y+1, 266, 1, output_pixels);
+  }
 }
 
 enum save_status_e {
@@ -126,7 +172,7 @@ char* read_save_file(const char* name, size_t size) {
   } else {
     memset(output, 0xFF, size);
   }
-  
+
   free(save_name);
   
   return output;
@@ -168,7 +214,7 @@ void extapp_main() {
     .cart_ram = NULL
   };
   enum gb_init_error_e ret;
-  
+
   #if DUMMY_ROM
   priv.rom = DUMMY_ROM_VAR(DUMMY_ROM_NAME);
   const char * file_name = DUMMY_ROM_FILE(DUMMY_ROM_NAME);
@@ -201,10 +247,10 @@ void extapp_main() {
   size_t save_size = gb_get_save_size(&gb);
   priv.cart_ram = read_save_file(file_name, save_size);
   saveCooldown = SAVE_COOLDOWN;
-  
+
   // Init LCD
-  gb_init_lcd(&gb, &lcd_draw_line);
-  
+  gb_init_lcd(&gb, &lcd_draw_line_centered);
+
   extapp_pushRectUniform(0, 0, NW_LCD_WIDTH, NW_LCD_HEIGHT, 0);
   
   running = true;
@@ -247,7 +293,32 @@ void extapp_main() {
       running = false;
       break;
     }
-    
+
+    if (kb & SCANCODE_Plus) {
+      gb.display.lcd_draw_line = lcd_draw_line_maximized;
+    }
+    if (kb & SCANCODE_Minus) {
+      gb.display.lcd_draw_line = lcd_draw_line_centered;
+      extapp_pushRectUniform(0, 0, NW_LCD_WIDTH, NW_LCD_HEIGHT, 0);
+    }
+    if (kb & SCANCODE_Multiplication) {
+      gb.display.lcd_draw_line = lcd_draw_line_maximized_ratio;
+      extapp_pushRectUniform(0, 0, NW_LCD_WIDTH, NW_LCD_HEIGHT, 0);
+    }
+
+    if (kb & SCANCODE_One) {
+      palette = palette_peanut_GB;
+    }
+    if (kb & SCANCODE_Two) {
+      palette = palette_original;
+    }
+    if (kb & SCANCODE_Three) {
+      palette = palette_gray;
+    }
+    if (kb & SCANCODE_Four) {
+      palette = palette_gray_negative;
+    }
+
     gb.gb_frame = 0;
     int i = 0;
     for(i = 0; !gb.gb_frame && i < 32000; i++)
