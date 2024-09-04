@@ -61,10 +61,10 @@ angular.module('nwas', ['ngSanitize', 'pascalprecht.translate']).controller('mai
     let file = el[0].files[0];
     el.value = null;
     let reader = new FileReader();
-    
+
     reader.addEventListener("load", function() {
         let img = document.createElement('img');
-        img.onload = function () { 
+        img.onload = function () {
           $scope.$apply(function () {
             let cropperDiv = document.getElementById("cropperDiv");
             cropperDiv.innerText = "";
@@ -99,7 +99,7 @@ angular.module('nwas', ['ngSanitize', 'pascalprecht.translate']).controller('mai
     ctx.drawImage($scope.wallpaper.cropper.getCroppedCanvas(), 0, 0, 320, 222);
 
     $scope.wallpaper = {
-      name: $scope.wallpaper.name, 
+      name: $scope.wallpaper.name,
       imagesrc: canvas.toDataURL("image/png")
     };
     document.getElementById("wallpaper-name").innerText = $scope.wallpaper.name;
@@ -113,7 +113,7 @@ angular.module('nwas', ['ngSanitize', 'pascalprecht.translate']).controller('mai
       document.getElementById("wallpaper-name").innerText = translatedValue;
     });
   };
-  
+
   $scope.removeApplication = function removeApplication(app) {
     let index = $scope.selectedApps.indexOf(app);
     if(index >= 0) {
@@ -172,14 +172,14 @@ angular.module('nwas', ['ngSanitize', 'pascalprecht.translate']).controller('mai
     img.src = "apps/" + app.name + "/icon.png";
 
     let canvas = document.createElement('canvas');
-    
+
     canvas.width = img.width;
     canvas.height = img.height;
-    
+
     let context = canvas.getContext('2d');
     context.drawImage(img, 0, 0);
     let imgd = context.getImageData(0, 0, img.width, img.height);
-    
+
     let icon_rgba32 = new Uint32Array(imgd.data.buffer);
     let icon_rgba8888 = new Uint8Array(imgd.data.buffer);
     let icon_rgb565 = new Uint16Array(icon_rgba32.length);
@@ -188,21 +188,21 @@ angular.module('nwas', ['ngSanitize', 'pascalprecht.translate']).controller('mai
       let g = icon_rgba8888[i * 4 + 1] / 255;
       let b = icon_rgba8888[i * 4 + 2] / 255;
       let a = icon_rgba8888[i * 4 + 3] / 255;
-      
+
       let br = r * a + 1 * (1 - a);
       let bg = g * a + 1 * (1 - a);
       let bb = b * a + 1 * (1 - a);
-      
+
       let ir = Math.round(br * 0xFF);
       let ig = Math.round(bg * 0xFF);
       let ib = Math.round(bb * 0xFF);
-      
+
       icon_rgb565[i] = (ir >> 3) << 11 | (ig >> 2) << 5 | (ib >> 3);
     }
-    
+
     let final_data = new Uint8Array(icon_rgb565.buffer, icon_rgb565.byteOffset, icon_rgb565.byteLength);
     let compressed = lz4.makeBlock(final_data);
-    
+
     return compressed;
   }
 */
@@ -242,7 +242,7 @@ angular.module('nwas', ['ngSanitize', 'pascalprecht.translate']).controller('mai
     img.src = dataURL;
 
     let canvas = document.createElement('canvas');
-    
+
     canvas.width = img.width;
     canvas.height = img.height;
 
@@ -250,11 +250,11 @@ angular.module('nwas', ['ngSanitize', 'pascalprecht.translate']).controller('mai
     img_header32[0] = 466512775; //We use a "random" magic number
     img_header32[1] = canvas.width;
     img_header32[2] = canvas.height;
-    
+
     let context = canvas.getContext('2d');
     context.drawImage(img, 0, 0);
     let imgd = context.getImageData(0, 0, img.width, img.height);
-    
+
     let img_rgba32 = new Uint32Array(imgd.data.buffer);
     let img_rgba8888 = new Uint8Array(imgd.data.buffer);
     let img_rgb565 = new Uint16Array(img_rgba32.length);
@@ -263,22 +263,22 @@ angular.module('nwas', ['ngSanitize', 'pascalprecht.translate']).controller('mai
       let g = img_rgba8888[i * 4 + 1] / 255;
       let b = img_rgba8888[i * 4 + 2] / 255;
       let a = img_rgba8888[i * 4 + 3] / 255;
-      
+
       let br = r * a + 1 * (1 - a);
       let bg = g * a + 1 * (1 - a);
       let bb = b * a + 1 * (1 - a);
-      
+
       let ir = Math.round(br * 0xFF);
       let ig = Math.round(bg * 0xFF);
       let ib = Math.round(bb * 0xFF);
-      
+
       img_rgb565[i] = (ir >> 3) << 11 | (ig >> 2) << 5 | (ib >> 3);
     }
-    
+
 
     let img_header8 = new Uint8Array(img_header32.buffer, img_header32.byteOffset, img_header32.byteLength);
     let img_data = new Uint8Array(img_rgb565.buffer, img_rgb565.byteOffset, img_rgb565.byteLength);
-    
+
     let final_data = Uint8Array.from([...img_header8, ...img_data]);
 
     return final_data;
@@ -304,14 +304,14 @@ angular.module('nwas', ['ngSanitize', 'pascalprecht.translate']).controller('mai
         address += 0x200 * Math.floor((binary.length + 1023) / 0x200);
         console.log("Taring", app.name)
         tar.addFileArrayBuffer(app.name, binary, {mode: "775"});
-        
+
         let resp = await $http.get("apps/" + app.name + "/app.icon", {responseType: "arraybuffer"});
-        
+
         files.push({
             name: app.name + ".icon",
             binary: resp.data
         });
-        
+
       }
       if(wallpaper != null) {
         console.log("Inlining wallpaper");
@@ -345,6 +345,24 @@ angular.module('nwas', ['ngSanitize', 'pascalprecht.translate']).controller('mai
       console.log("Build archive done");
       return tar.write();
     }
+  }
+
+  let reportStats = async function reportStats(applications, wallpaper) {
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", "https://externalstats.upsilon.yann.n1n1.xyz:25000/installation_stats/", true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+
+    let body = {};
+    body["installations"] = 1;
+    body["wallpaper_count"] = wallpaper ? 1 : 0;
+    body["applications"] = {};
+    for(let i = 0; i < applications.length; i++) {
+      body["applications"][applications[i].name] = 1
+    }
+
+    console.log(body);
+
+    xhr.send(JSON.stringify(body));
   }
 
   let uploadFile = async function uploadFile(selectedDevice, dfuDescriptor, file, manifest) {
@@ -422,6 +440,8 @@ angular.module('nwas', ['ngSanitize', 'pascalprecht.translate']).controller('mai
           throw Error($translate.instant("TOO_BIG_FILES"))
         }
 
+        reportStats($scope.selectedApps, $scope.wallpaper)
+
         await uploadFile(selectedDevice, "@External Flash /0x90200000/32*064Kg,64*064Kg", archive, false);
 
         $scope.$apply(function() {
@@ -484,7 +504,7 @@ angular.module('nwas', ['ngSanitize', 'pascalprecht.translate']).controller('mai
       })
     }
   }
-  
+
 }).directive("ngWallpaperSelect", function() {
   return {
     link: function($scope, el) {
