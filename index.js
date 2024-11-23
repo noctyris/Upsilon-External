@@ -347,9 +347,9 @@ angular.module('nwas', ['ngSanitize', 'pascalprecht.translate']).controller('mai
     }
   }
 
-  let reportStats = async function reportStats(applications, wallpaper) {
+  let reportStats = async function reportStats(applications, wallpaper, type) {
     var xhr = new XMLHttpRequest();
-    xhr.open("POST", "https://externalstats.upsilon.yann.n1n1.xyz:25000/installation_stats/", true);
+    xhr.open("POST", "https://externalstats.upsilon.yann.n1n1.xyz:8080/" + type + "/", true);
     xhr.setRequestHeader('Content-Type', 'application/json');
 
     let body = {};
@@ -440,12 +440,13 @@ angular.module('nwas', ['ngSanitize', 'pascalprecht.translate']).controller('mai
           throw Error($translate.instant("TOO_BIG_FILES"))
         }
 
-        reportStats($scope.selectedApps, $scope.wallpaper)
+        reportStats($scope.selectedApps, $scope.wallpaper, "installation_stats")
 
         await uploadFile(selectedDevice, "@External Flash /0x90200000/32*064Kg,64*064Kg", archive, false);
 
         $scope.$apply(function() {
           $scope.allDone = true;
+          reportStats($scope.selectedApps, $scope.wallpaper, "successful_installation_stats")
         });
       }
     ).catch(error => {
