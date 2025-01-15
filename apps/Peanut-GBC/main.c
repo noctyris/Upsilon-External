@@ -133,7 +133,7 @@ void lcd_draw_line_dummy(struct gb_s *gb, const uint8_t pixels[LCD_WIDTH], const
 static void lcd_draw_line_maximized_ratio(struct gb_s * gb, const uint8_t * input_pixels, const uint_fast8_t line) {
   // Nearest neighbor scaling of a 160x144 texture to a 266x240 resolution (to keep the ratio)
   // Horizontally, we multiply by 1.66 (160*1.66 = 266)
-  uint16_t output_pixels[266];
+  uint16_t output_pixels[265];
 
   if (gb->cgb.cgbMode) {
     #pragma unroll 40
@@ -155,9 +155,9 @@ static void lcd_draw_line_maximized_ratio(struct gb_s * gb, const uint8_t * inpu
   // We can't use floats, so we use a fixed point representation
   // Vertically, we want to scale by a 5/3 ratio. So we need to make 5 lines out of three:  we double two lines out of three.
   uint16_t y = (5 * line) / 3;
-  extapp_pushRect((NW_LCD_WIDTH - 266) / 2, y, 266, 1, output_pixels);
+  extapp_pushRect((NW_LCD_WIDTH - 265) / 2, y, 265, 1, output_pixels);
   if (line % 3 != 0) {
-    extapp_pushRect((NW_LCD_WIDTH - 266) / 2, y + 1, 266, 1, output_pixels);
+    extapp_pushRect((NW_LCD_WIDTH - 265) / 2, y + 1, 265, 1, output_pixels);
   }
 }
 
