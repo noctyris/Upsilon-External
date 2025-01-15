@@ -316,7 +316,7 @@ void extapp_main() {
     }
     // if (kb & SCANCODE_Division) {
     //   gb.display.lcd_draw_line = lcd_draw_line_dummy;
-    //   drawLineMode = lcd_draw_line_centered;
+    //   drawLineMode = lcd_draw_line_dummy;
     //   extapp_pushRectUniform(0, 0, NW_LCD_WIDTH, NW_LCD_HEIGHT, 0);
     // }
 

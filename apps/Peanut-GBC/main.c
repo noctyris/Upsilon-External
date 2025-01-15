@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <setjmp.h>
 
 #include "selector.h"
 #include "peanut_gb.h"
@@ -19,6 +20,12 @@
 
 #define DUMMY_ROM 0
 #define DUMMY_ROM_NAME Tetris
+
+#define ENABLE_FRAME_LIMITER 1
+#define TARGET_FRAME_DURATION 16
+#define AUTOMATIC_FRAME_SKIPPING 1
+// Useful when AUTOMATIC_FRAME_SKIPPING is disabled
+#define FRAME_SKIPPING_DEFAULT_STATE false
 
 
 #ifndef DUMMY_ROM
@@ -72,7 +79,7 @@ void gb_error(struct gb_s *gb, const enum gb_error_e gb_err, const uint16_t val)
     "INVALID READ",
     "INVALID WRITE"
   };
-  
+
   switch (gb_err) {
     case GB_INVALID_WRITE:
     case GB_INVALID_READ:
@@ -80,7 +87,7 @@ void gb_error(struct gb_s *gb, const enum gb_error_e gb_err, const uint16_t val)
     default:
       running = false;
   }
-  
+
   // TODO: Handle errors.
 }
 const uint16_t palette_peanut_GB[4] = {0x9DE1, 0x8D61, 0x3306, 0x09C1};
@@ -88,21 +95,32 @@ const uint16_t palette_original[4] = {0x8F80, 0x24CC, 0x4402, 0x0A40};
 const uint16_t palette_gray[4] = {0xFFFF, 0xAD55, 0x52AA, 0x0000};
 const uint16_t palette_gray_negative[4] = {0x0000, 0x52AA, 0xAD55, 0xFFFF};
 const uint16_t * palette = palette_peanut_GB;
+uint16_t fixedPalette[0x40];
 
-uint16_t color_from_gb_pixel(uint8_t gb_pixel) {
+inline uint16_t color_from_gb_pixel(uint8_t gb_pixel) {
   uint8_t gb_color = gb_pixel & 0x3;
   return palette[gb_color];
+}
+
+void fixPalette(struct gb_s *gb) {
+  for(int i = 0; i < sizeof(gb->cgb.fixPalette)/sizeof(uint16_t); i++) {
+    fixedPalette[i] = gb->cgb.fixPalette[i];
+    fixedPalette[i] = (fixedPalette[i] & 0x1F) << 11 | (fixedPalette[i] & 0x3E0) << 1 | (fixedPalette[i] & 0x7C00) >> 10;
+    fixedPalette[i] = (fixedPalette[i] & 0x1F) << 11 | (fixedPalette[i] & 0x7E0) | (fixedPalette[i] & 0xF800) >> 11;
+  }
 }
 
 void lcd_draw_line_centered(struct gb_s *gb, const uint8_t * input_pixels, const uint_fast8_t line) {
   uint16_t output_pixels[2*LCD_WIDTH];
 
-  for(int i = 0; i < LCD_WIDTH; i++) {
-    if (gb->cgb.cgbMode) {
-      output_pixels[i] = gb->cgb.fixPalette[input_pixels[i]];
-      output_pixels[i] = (output_pixels[i] & 0x1F) << 11 | (output_pixels[i] & 0x3E0) << 1 | (output_pixels[i] & 0x7C00) >> 10;
-      output_pixels[i] = (output_pixels[i] & 0x1F) << 11 | (output_pixels[i] & 0x7E0) | (output_pixels[i] & 0xF800) >> 11;
-    } else {
+  if (gb->cgb.cgbMode) {
+    #pragma unroll 40
+    for(int i = 0; i < LCD_WIDTH; i++) {
+      output_pixels[i] = fixedPalette[input_pixels[i]];
+    }
+  } else {
+    #pragma unroll 40
+    for(int i = 0; i < LCD_WIDTH; i++) {
       output_pixels[i] = color_from_gb_pixel(input_pixels[i]);
     }
   }
@@ -110,59 +128,36 @@ void lcd_draw_line_centered(struct gb_s *gb, const uint8_t * input_pixels, const
   extapp_pushRect((NW_LCD_WIDTH - LCD_WIDTH) / 2, (NW_LCD_HEIGHT - LCD_HEIGHT) / 2 + line, LCD_WIDTH, 1, output_pixels);
 }
 
-static void lcd_draw_line_maximized(struct gb_s * gb, const uint8_t * input_pixels, const uint_fast8_t line) {
-  // Nearest neighbor scaling of a 160x144 texture to a 320x240 resolution
-  // Horizontally, we just double
-  uint16_t output_pixels[LCD_WIDTH];
-  uint16_t zoomPixels[2 * LCD_WIDTH];
-  for (int i = 0; i < LCD_WIDTH; i++) {
-    if (gb->cgb.cgbMode) {
-      output_pixels[i] = gb->cgb.fixPalette[input_pixels[i]];
-      output_pixels[i] = (output_pixels[i] & 0x1F) << 11 | (output_pixels[i] & 0x3E0) << 1 | (output_pixels[i] & 0x7C00) >> 10;
-      output_pixels[i] = (output_pixels[i] & 0x1F) << 11 | (output_pixels[i] & 0x7E0) | (output_pixels[i] & 0xF800) >> 11;
-    } else {
-      output_pixels[i] = color_from_gb_pixel(input_pixels[i]);
-    }
-
-    uint16_t color = output_pixels[i];
-
-    zoomPixels[2 * i] = color;
-    zoomPixels[2 * i + 1] = color;
-  }
-  // Vertically, we want to scale by a 5/3 ratio. So we need to make 5 lines out of three:  we double two lines out of three.
-  uint16_t y = (5 * line) / 3;
-  extapp_pushRect(0, y, 2 * LCD_WIDTH, 1, zoomPixels);
-  if (line % 3 != 0) {
-    extapp_pushRect(0, y + 1, 2 * LCD_WIDTH, 1, zoomPixels);
-  }
-}
+void lcd_draw_line_dummy(struct gb_s *gb, const uint8_t pixels[LCD_WIDTH], const uint_fast8_t line) {}
 
 static void lcd_draw_line_maximized_ratio(struct gb_s * gb, const uint8_t * input_pixels, const uint_fast8_t line) {
   // Nearest neighbor scaling of a 160x144 texture to a 266x240 resolution (to keep the ratio)
   // Horizontally, we multiply by 1.66 (160*1.66 = 266)
-  uint16_t output_pixels[LCD_WIDTH];
-  uint16_t zoomPixels[266];
-  for (int i = 0; i < LCD_WIDTH; i++) {
-    if (gb->cgb.cgbMode) {
-      output_pixels[i] = gb->cgb.fixPalette[input_pixels[i]];
-      output_pixels[i] = (output_pixels[i] & 0x1F) << 11 | (output_pixels[i] & 0x3E0) << 1 | (output_pixels[i] & 0x7C00) >> 10;
-      output_pixels[i] = (output_pixels[i] & 0x1F) << 11 | (output_pixels[i] & 0x7E0) | (output_pixels[i] & 0xF800) >> 11;
-    } else {
-      output_pixels[i] = color_from_gb_pixel(input_pixels[i]);
+  uint16_t output_pixels[266];
+
+  if (gb->cgb.cgbMode) {
+    #pragma unroll 40
+    for (int i = 0; i < LCD_WIDTH; i++) {
+      uint16_t color = fixedPalette[input_pixels[i]];
+      output_pixels[166 * i / 100] = color;
+      output_pixels[166 * i / 100 + 1] = color;
     }
+  } else {
+    #pragma unroll 40
+    for (int i = 0; i < LCD_WIDTH; i++) {
+      uint16_t color = color_from_gb_pixel(input_pixels[i]);
 
-    uint16_t color = output_pixels[i];
-
-    zoomPixels[166 * i / 100] = color;
-    zoomPixels[166 * i / 100 + 1] = color;
-    zoomPixels[166 * i / 100 + 2] = color;
+      output_pixels[166 * i / 100] = color;
+      output_pixels[166 * i / 100 + 1] = color;
+    }
   }
+
   // We can't use floats, so we use a fixed point representation
   // Vertically, we want to scale by a 5/3 ratio. So we need to make 5 lines out of three:  we double two lines out of three.
   uint16_t y = (5 * line) / 3;
-  extapp_pushRect((NW_LCD_WIDTH - 266) / 2, y, 266, 1, zoomPixels);
+  extapp_pushRect((NW_LCD_WIDTH - 266) / 2, y, 266, 1, output_pixels);
   if (line % 3 != 0) {
-    extapp_pushRect((NW_LCD_WIDTH - 266) / 2, y + 1, 266, 1, zoomPixels);
+    extapp_pushRect((NW_LCD_WIDTH - 266) / 2, y + 1, 266, 1, output_pixels);
   }
 }
 
@@ -180,14 +175,14 @@ char* read_save_file(const char* name, size_t size) {
   char* save_name = malloc(strlen(name) + 3);
   strcpy(save_name, name);
   osd_newextension(save_name, ".gbs");
-  
+
   char* output = malloc(size);
-  
+
   if (extapp_fileExists(save_name, EXTAPP_RAM_FILE_SYSTEM)) {
     size_t file_len = 0;
     const char* save_content = extapp_fileRead(save_name, &file_len, EXTAPP_RAM_FILE_SYSTEM);
     int error = LZ4_decompress_safe(save_content, output, file_len, size);
-    
+
     // Handling corrupted save.
     if (error <= 0) {
       memset(output, 0xFF, size);
@@ -201,7 +196,7 @@ char* read_save_file(const char* name, size_t size) {
   }
 
   free(save_name);
-  
+
   return output;
 }
 
@@ -209,11 +204,11 @@ void write_save_file(const char* name, char* data, size_t size) {
   char* save_name = malloc(strlen(name) + 3);
   strcpy(save_name, name);
   osd_newextension(save_name, ".gbs");
-  
+
   char* output = malloc((size_t) MAX_SCRIPTSTORE_SIZE);
-  
+
   int compressed_size = LZ4_compress_default(data, output, size, MAX_SCRIPTSTORE_SIZE);
-  
+
   if (compressed_size > 0) {
     if (extapp_fileWrite(save_name, output, compressed_size, EXTAPP_RAM_FILE_SYSTEM)) {
       saveMessage = SAVE_WRITE_OK;
@@ -223,7 +218,7 @@ void write_save_file(const char* name, char* data, size_t size) {
   } else {
     saveMessage = SAVE_COMPRESS_ERR;
   }
-  
+
   free(save_name);
   free(output);
 }
@@ -233,7 +228,38 @@ static bool wasMSpFPressed = false;
 static uint8_t saveCooldown = 0;
 static bool MSpFfCounter = false;
 
-void extapp_main() {
+extern uint32_t _heap_size;
+extern void *_heap_base;
+
+void * malloc_with_storage(size_t __size, const char * name) {
+  bool isSuccess = extapp_fileWrite(name, "", __size, EXTAPP_RAM_FILE_SYSTEM);
+  if (isSuccess) {
+    size_t file_len = 0;
+    return (char *)extapp_fileRead(name, &file_len, EXTAPP_RAM_FILE_SYSTEM);
+  } else {
+    return malloc(__size);
+  }
+}
+
+void free_with_storage(void *__ptr, const char * name) {
+  // In pointer is in heap, remove it using normal free
+  if ((__ptr < (_heap_ptr + _heap_size)) && (__ptr > _heap_ptr)) {
+    free(__ptr);
+  }
+  // We are always removing the file to avoid risking a memory leak in case of a
+  // bug as RAM memory leak is not a big concern, but RAM filesystem leak is a
+  // real problem it won't be cleared and the user may need it for other things
+  extapp_fileErase(name, EXTAPP_RAM_FILE_SYSTEM);
+}
+
+void cleanup_files() {
+  extapp_fileErase("wram.malloc", EXTAPP_RAM_FILE_SYSTEM);
+  extapp_fileErase("vram.malloc", EXTAPP_RAM_FILE_SYSTEM);
+  extapp_fileErase("hram_io.malloc", EXTAPP_RAM_FILE_SYSTEM);
+  extapp_fileErase("oam.malloc", EXTAPP_RAM_FILE_SYSTEM);
+}
+
+void extapp_main_real() {
   struct gb_s gb;
   enum gb_init_error_e gb_ret;
   struct priv_t priv = {
@@ -249,27 +275,29 @@ void extapp_main() {
   const char * file_name = select_rom();
   if (!file_name)
     return;
-  
+
   size_t file_len = 0;
   priv.rom = (const uint8_t*) extapp_fileRead(file_name, &file_len, EXTAPP_FLASH_FILE_SYSTEM);
   #endif
-  
+
   // Alloc internal RAM.
-  gb.wram = malloc(WRAM_SIZE);
-  gb.vram = malloc(VRAM_SIZE);
-  gb.hram_io = malloc(HRAM_IO_SIZE);
-  gb.oam = malloc(OAM_SIZE);
+  gb.wram = malloc_with_storage(WRAM_SIZE, "wram.malloc");
+  gb.vram = malloc_with_storage(VRAM_SIZE, "vram.malloc");
+  gb.hram_io = malloc_with_storage(HRAM_IO_SIZE, "hram_io.malloc");
+  gb.oam = malloc_with_storage(OAM_SIZE, "oam.malloc");
+
 
   gb_ret = gb_init(&gb, &gb_rom_read, &gb_cart_ram_read, &gb_cart_ram_write, &gb_error, &priv);
-  
+
   // TODO: Handle init errors.
   switch(gb_ret) {
     case GB_INIT_NO_ERROR:
       break;
     default:
+      cleanup_files();
       return;
   }
-  
+
   // Alloc and init save RAM.
   size_t save_size = gb_get_save_size(&gb);
   priv.cart_ram = read_save_file(file_name, save_size);
@@ -279,12 +307,28 @@ void extapp_main() {
   gb_init_lcd(&gb, &lcd_draw_line_centered);
 
   extapp_pushRectUniform(0, 0, NW_LCD_WIDTH, NW_LCD_HEIGHT, 0);
-  
+
+  uint32_t lastMSpF = 0;
+
+  #if ENABLE_FRAME_LIMITER
+  // We use a "smart" frame limiter: for each frame, we add
+  // `frame duration - target frame time` to our budget. If the frame was faster
+  // than target, we sleep for (simplified version without taking the case where
+  // time budget > target frame time - last frame duration):
+  // target frame time - last frame duration - time budget
+  // This way, we will keep an average frame duration consistant.
+  uint32_t timeBudget = 0;
+  #endif
+
+  // Skip 1/2 frame, spare 3 ms/f on my N0110
+  bool frameSkipping = FRAME_SKIPPING_DEFAULT_STATE;
+  void * drawLineMode = lcd_draw_line_centered;
+
   running = true;
   while(running) {
     uint64_t start = extapp_millis();
     uint64_t kb = extapp_scanKeyboard();
-    
+
     gb.direct.joypad_bits.a = (kb & SCANCODE_Back) ? 0 : 1;
     gb.direct.joypad_bits.b = (kb & SCANCODE_OK) ? 0 : 1;
     gb.direct.joypad_bits.select = (kb & ((uint64_t)1 << 8)) ? 0 : 1;
@@ -293,7 +337,7 @@ void extapp_main() {
     gb.direct.joypad_bits.right = (kb & SCANCODE_Right) ? 0 : 1;
     gb.direct.joypad_bits.left = (kb & SCANCODE_Left) ? 0 : 1;
     gb.direct.joypad_bits.down = (kb & SCANCODE_Down) ? 0 : 1;
-    
+
     if (kb & SCANCODE_Backspace)
       gb_reset(&gb);
     if (kb & SCANCODE_Toolbox) {
@@ -305,7 +349,7 @@ void extapp_main() {
     } else if (wasSavePressed) {
       wasSavePressed = false;
     }
-    
+
     if (kb & SCANCODE_Alpha) {
       if (!wasMSpFPressed) {
         MSpFfCounter = !MSpFfCounter;
@@ -315,23 +359,26 @@ void extapp_main() {
     } else if (wasMSpFPressed) {
       wasMSpFPressed = false;
     }
-    
+
     if (kb & SCANCODE_Zero) {
       running = false;
       break;
     }
 
     if (kb & SCANCODE_Plus) {
-      gb.display.lcd_draw_line = lcd_draw_line_maximized;
+      gb.display.lcd_draw_line = lcd_draw_line_maximized_ratio;
+      drawLineMode = lcd_draw_line_maximized_ratio;
     }
     if (kb & SCANCODE_Minus) {
       gb.display.lcd_draw_line = lcd_draw_line_centered;
+      drawLineMode = lcd_draw_line_centered;
       extapp_pushRectUniform(0, 0, NW_LCD_WIDTH, NW_LCD_HEIGHT, 0);
     }
-    if (kb & SCANCODE_Multiplication) {
-      gb.display.lcd_draw_line = lcd_draw_line_maximized_ratio;
-      extapp_pushRectUniform(0, 0, NW_LCD_WIDTH, NW_LCD_HEIGHT, 0);
-    }
+    // if (kb & SCANCODE_Division) {
+    //   gb.display.lcd_draw_line = lcd_draw_line_dummy;
+    //   drawLineMode = lcd_draw_line_dummy;
+    //   extapp_pushRectUniform(0, 0, NW_LCD_WIDTH, NW_LCD_HEIGHT, 0);
+    // }
 
     if (kb & SCANCODE_One) {
       palette = palette_peanut_GB;
@@ -350,7 +397,7 @@ void extapp_main() {
     int i = 0;
     for(i = 0; !gb.gb_frame && i < 32000; i++)
       __gb_step_cpu(&gb);
-    
+
     if (saveCooldown > 1) {
       saveCooldown--;
       switch(saveMessage) {
@@ -377,22 +424,99 @@ void extapp_main() {
       extapp_pushRectUniform(0, NW_LCD_HEIGHT / 2 + LCD_HEIGHT / 2, NW_LCD_WIDTH, NW_LCD_HEIGHT - (NW_LCD_HEIGHT / 2 + LCD_HEIGHT / 2), 0);
     }
     uint64_t end = extapp_millis();
-    
-    if (MSpFfCounter) {
-      uint16_t MSpF = (uint16_t)(end - start);
-      char buffer[30];
-      sprintf(buffer, "%d ms/f", MSpF);
-      extapp_drawTextSmall(buffer, 2, NW_LCD_HEIGHT - 10, 65535, 0, false);
-    }
 
+    if (gb.gb_frame) {
+      fixPalette(&gb);
+      uint16_t MSpF = (uint16_t)(end - start);
+
+      if (MSpFfCounter) {
+        // We need to average the MSpF as skipped frames are faster
+        uint16_t MSpFAverage = (MSpF + lastMSpF) / 2;
+        char buffer[100];
+        sprintf(buffer, "%d ms/f", MSpF);
+        // sprintf(buffer, "%d ms/f, %d ", MSpFAverage, timeBudget);
+        extapp_drawTextSmall(buffer, 2, NW_LCD_HEIGHT - 10, 65535, 0, false);
+      }
+
+      if (frameSkipping) {
+        if (gb.display.lcd_draw_line != lcd_draw_line_dummy) {
+          drawLineMode = gb.display.lcd_draw_line;
+          gb.display.lcd_draw_line = lcd_draw_line_dummy;
+        } else {
+          gb.display.lcd_draw_line = drawLineMode;
+        }
+      }
+
+      #if ENABLE_FRAME_LIMITER
+      uint32_t differenceToTarget = abs(TARGET_FRAME_DURATION - MSpF);
+
+      if (TARGET_FRAME_DURATION - MSpF > 0) {
+        // Frame was faster than target, so let's slow down if we have time to
+        // catch up
+
+        // If on previous frames we were
+        if (timeBudget >= differenceToTarget) {
+          // We were too slow at previous frames so we have to catch up
+          timeBudget -= differenceToTarget;
+        } else if (timeBudget > 0) {
+          // We can catch up everything on one frame, so let's sleep a bit less
+          // than what we would have done if we weren't late
+          uint32_t time_to_sleep = differenceToTarget - timeBudget;
+          extapp_msleep(time_to_sleep);
+          timeBudget = 0;
+        } else {
+          // We don't have time to catch up, so we just sleep until we get to 16ms/f
+          extapp_msleep(differenceToTarget);
+
+          #if AUTOMATIC_FRAME_SKIPPING
+          // Disable frame skipping as we are running faster than required
+          frameSkipping = false;
+          gb.display.lcd_draw_line = drawLineMode;
+          #endif
+        }
+      } else {
+        // Comparaison is technically not required, but we do this avoid the
+        // performance cost of duplicate assignation when we are at the maximum
+        // time budget, which is often the case when lagging
+        if (timeBudget < TARGET_FRAME_DURATION) {
+          // Frame was slower than target, so we need to catch up.
+          timeBudget += differenceToTarget;
+
+          if (timeBudget >= TARGET_FRAME_DURATION) {
+            timeBudget = TARGET_FRAME_DURATION;
+
+            #if AUTOMATIC_FRAME_SKIPPING
+            // Enable frame skipping in an attempt to speed up emulation
+            frameSkipping = true;
+            #endif
+          }
+        }
+      }
+      #endif
+      lastMSpF = MSpF;
+    }
   }
-  
-  
-  free(gb.wram);
-  free(gb.vram);
-  free(gb.hram_io);
-  free(gb.oam);
-  
+
+  free_with_storage(gb.wram, "wram.malloc");
+  free_with_storage(gb.vram, "vram.malloc");
+  free_with_storage(gb.hram_io, "hram_io.malloc");
+  free_with_storage(gb.oam, "oam.malloc");
+
   write_save_file(file_name, priv.cart_ram, save_size);
   free(priv.cart_ram);
+}
+
+extern jmp_buf oom_jmp_buf;
+void extapp_main() {
+  // I'm not sure if copying jmp_buf is allowed, but it's working
+  // https://stackoverflow.com/questions/32752204/save-copy-jmp-buf-c
+  jmp_buf original_oom_jmp_buf;
+  memcpy(original_oom_jmp_buf, oom_jmp_buf, sizeof(oom_jmp_buf));
+  int result = setjmp(oom_jmp_buf);
+  if(result == 0) {
+    extapp_main_real();
+  } else {
+    cleanup_files();
+    longjmp(original_oom_jmp_buf, result);
+  }
 }

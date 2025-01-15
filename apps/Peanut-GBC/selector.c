@@ -71,7 +71,7 @@ const char * select_rom() {
   extapp_pushRectUniform(0, 0, LCD_WIDTH, LCD_HEIGHT, SELECTOR_COLOR_BG);
   extapp_drawTextLarge("          Select a ROM          ", 0, 0, SELECTOR_COLOR_HEAD_FG, SELECTOR_COLOR_HEAD_BG, false);
 
-  int nb = extapp_fileListWithExtension(filenames, max_roms, "", EXTAPP_FLASH_FILE_SYSTEM);
+  int nb = extapp_fileListWithExtension((const char **)filenames, max_roms, "", EXTAPP_FLASH_FILE_SYSTEM);
 
   size_t len;
   for(int i = 0; i < nb; i++) {
@@ -87,13 +87,13 @@ const char * select_rom() {
       for(uint16_t i = 0x0134; i < 0x014D; i++) {
         checksum += ~data[i];
       }
-      
+
       if (checksum != data[0x014D]) {
         filenames[i] = NULL;
       }
     }
-    
-  
+
+
   }
   nb = remove(filenames, filenames + nb) - filenames;
 
