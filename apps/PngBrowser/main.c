@@ -9,6 +9,21 @@ extern uint32_t _heap_size;
 extern void *_heap_base;
 extern void *_heap_ptr;
 
+int get_current_image_size(const char* filename, struct spng_ihdr* ihdr) {
+    size_t len;
+    const char *file_content = extapp_fileRead(filename, &len, EXTAPP_FLASH_FILE_SYSTEM);
+    if (!file_content) return -1;
+
+    spng_ctx *ctx = spng_ctx_new(0);
+    if (!ctx) return -1;
+
+    spng_set_png_buffer(ctx, file_content, len);
+    int result = spng_get_ihdr(ctx, ihdr);
+    spng_ctx_free(ctx);
+
+    return result;
+}
+
 void draw_screen(char* Filename, char* Dimension, int ImageNumber, int ImageTotal, int ToolbarPalette, int BackgroundPalette, int TextPalette) {
     extapp_pushRectUniform(0, 18, 320, 222, BackgroundPalette);
     extapp_pushRectUniform(0, 0, 320, 18, ToolbarPalette);
@@ -239,12 +254,15 @@ void extapp_main() {
                 extapp_msleep(200);
             }
         }
-        if (extapp_isKeydown(45)) {
-            if (Zoom == 0) {
-                Zoom = 1;
-                Drawn = 1;
-                extapp_msleep(200);
+        if (extapp_isKeydown(45) && Zoom == 0) {
+            struct spng_ihdr ihdr;
+            if (get_current_image_size(filenames[ImageNum], &ihdr) == 0) {
+                if (can_zoom(ihdr.width, ihdr.height)) {
+                    Zoom = 1;
+                    Drawn = 1;
+                }
             }
+            extapp_msleep(200);
         }
     }
     return 0;
