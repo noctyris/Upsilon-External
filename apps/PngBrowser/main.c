@@ -9,45 +9,6 @@ extern uint32_t _heap_size;
 extern void *_heap_base;
 extern void *_heap_ptr;
 
-void my_sprintf(char* str, const char* format, ...) {
-    str[0] = '\0'; // Clear the string
-
-    va_list args;
-    va_start(args, format);
-
-    for (const char *p = format; *p != '\0'; p++) {
-        if (*p == '%') {
-            p++;
-            switch (*p) {
-                case 'd': {
-                    int i = va_arg(args, int);
-                    char buffer[32];
-                    itoa(i, buffer, 10);
-                    strcat(str, buffer);
-                    break;
-                }
-                case 's': {
-                    char *s = va_arg(args, char*);
-                    strcat(str, s);
-                    break;
-                }
-                default:
-                    break;
-            }
-        } else {
-            size_t len = strlen(str);
-            str[len] = *p;
-            str[len + 1] = '\0';
-        }
-    }
-
-    va_end(args);
-}
-/*
-This function is used to draw the background and the text on the screen.
-params:
-    Filename: the name of the file to be displayed on the screen.
-*/
 void draw_screen(char* Filename, char* Dimension, int ImageNumber, int ImageTotal, int ToolbarPalette, int BackgroundPalette, int TextPalette) {
     extapp_pushRectUniform(0, 18, 320, 222, BackgroundPalette);
     extapp_pushRectUniform(0, 0, 320, 18, ToolbarPalette);
@@ -73,14 +34,137 @@ void draw_screen(char* Filename, char* Dimension, int ImageNumber, int ImageTota
     int FilenameLength = extapp_drawTextSmall(Filename, 0, 0, TextPalette, ToolbarPalette, true);
     extapp_drawTextSmall(Filename, (320/2) - (FilenameLength/2), 3, TextPalette, ToolbarPalette, false);
     extapp_drawTextSmall(Dimension, 7, 3, TextPalette, ToolbarPalette, false);
-    char ImageNumberBuffer[50];
-    my_sprintf(ImageNumberBuffer, "%d/%d", ImageNumber, ImageTotal);
+    char ImageNumberBuffer[16];
+    sprintf(ImageNumberBuffer, "%d/%d", ImageNumber, ImageTotal);
     int ImageNumberLength = extapp_drawTextSmall(ImageNumberBuffer, 0, 0, TextPalette, ToolbarPalette, true);
     extapp_drawTextSmall(ImageNumberBuffer, 320 - 7 - ImageNumberLength, 3, TextPalette, ToolbarPalette, false);
 }
 
-void extapp_main() {
+// Function to check if an image is too large for the screen
+int is_image_too_large(uint32_t width, uint32_t height) {
+    return (width > 320 || height > 222);
+}
 
+// Function to check if zooming is possible
+int can_zoom(uint32_t width, uint32_t height) {
+    return !(width*2 > 320 || height*2 > 222);
+}
+
+// Function to decode
+int decode_and_display_png(const char* filename, int ImageNum, int ImageTotal, int zoom, int ToolbarPalette, int BackgroundPalette, int TextPalette) {
+    size_t len;
+    const char *file_content = extapp_fileRead(filename, &len, EXTAPP_FLASH_FILE_SYSTEM);
+    if (!file_content) {
+        draw_screen(filename, " ", ImageNum + 1, ImageTotal, ToolbarPalette, BackgroundPalette, TextPalette);
+        extapp_drawTextLarge("Failed to read file", 80, 111, TextPalette, BackgroundPalette, false);
+        return 0;
+    }
+
+    spng_ctx *ctx = spng_ctx_new(0);
+    if (!ctx) {
+        draw_screen(filename, " ", ImageNum + 1, ImageTotal, ToolbarPalette, BackgroundPalette, TextPalette);
+        extapp_drawTextLarge("Failed to create spng context", 80, 111, TextPalette, BackgroundPalette, false);
+        return 0;
+    }
+
+    spng_set_png_buffer(ctx, file_content, len);
+
+    struct spng_ihdr ihdr;
+    if (spng_get_ihdr(ctx, &ihdr)) {
+        spng_ctx_free(ctx);
+        draw_screen(filename, " ", ImageNum + 1, ImageTotal, ToolbarPalette, BackgroundPalette, TextPalette);
+        extapp_drawTextLarge("Failed to get image size", 80, 111, TextPalette, BackgroundPalette, false);
+        return 0;
+    }
+
+    char DimensionBuffer[20];
+    sprintf(DimensionBuffer, "%dx%d", ihdr.width, ihdr.height);
+    draw_screen(filename, DimensionBuffer, ImageNum + 1, ImageTotal, ToolbarPalette, BackgroundPalette, TextPalette);
+
+    // Check if the image is too large for the screen
+    if (is_image_too_large(ihdr.width, ihdr.height)) {
+        spng_ctx_free(ctx);
+        draw_screen(filename, DimensionBuffer, ImageNum + 1, ImageTotal, ToolbarPalette, BackgroundPalette, TextPalette);
+        extapp_drawTextLarge("Image is too large for screen", 55, 101, TextPalette, BackgroundPalette, false);
+        char sizeWarning[40];
+        sprintf(sizeWarning, "Max size: 320x222, Image: %dx%d", ihdr.width, ihdr.height);
+        extapp_drawTextLarge(sizeWarning, 45, 121, TextPalette, BackgroundPalette, false);
+        return 0;
+    }
+
+    // If zoom is requested but not possible, switch to normal mode
+    if (zoom && !can_zoom(ihdr.width, ihdr.height)) {
+        zoom = 0;
+    }
+
+    uint32_t display_width = zoom ? ihdr.width*2 : ihdr.width;
+    uint32_t display_height = zoom ? ihdr.height*2 : ihdr.height;
+
+    // Calculate offset for centering the image
+    int OffsetX = (320 - display_width) / 2;
+    int OffsetY = (220 - display_height) / 2 + 19;
+
+    // Limit the size of our row buffer to conserve memory
+    // Max 320 pixels wide, 4 rows at a time to save memory
+    const int CHUNK_HEIGHT = 4;
+    uint8_t *row_buffer = malloc(ihdr.width * CHUNK_HEIGHT * 3);
+
+    if (!row_buffer) {
+        spng_ctx_free(ctx);
+        draw_screen(filename, DimensionBuffer, ImageNum + 1, ImageTotal, ToolbarPalette, BackgroundPalette, TextPalette);
+        extapp_drawTextLarge("Failed to allocate memory", 80, 111, TextPalette, BackgroundPalette, false);
+        return 0;
+    }
+
+    // Create a progressive decoder
+    if (spng_decode_image(ctx, NULL, 0, SPNG_FMT_RGB8, SPNG_DECODE_PROGRESSIVE)) {
+        free(row_buffer);
+        spng_ctx_free(ctx);
+        draw_screen(filename, DimensionBuffer, ImageNum + 1, ImageTotal, ToolbarPalette, BackgroundPalette, TextPalette);
+        extapp_drawTextLarge("Failed to setup decoder", 80, 111, TextPalette, BackgroundPalette, false);
+        return 0;
+    }
+
+    // Process the image in chunks
+    for (uint32_t y = 0; y < ihdr.height; y += CHUNK_HEIGHT) {
+        int current_chunk_height = (y + CHUNK_HEIGHT > ihdr.height) ? (ihdr.height - y) : CHUNK_HEIGHT;
+
+        struct spng_row_info row_info;
+        for (int i = 0; i < current_chunk_height; i++) {
+            if (spng_get_row_info(ctx, &row_info)) {
+                free(row_buffer);
+                spng_ctx_free(ctx);
+                return 0;
+            }
+
+            if (spng_decode_row(ctx, row_buffer + (i * ihdr.width * 3), ihdr.width * 3)) {
+                free(row_buffer);
+                spng_ctx_free(ctx);
+                return 0;
+            }
+        }
+
+        for (int i = 0; i < current_chunk_height; i++) {
+            for (uint32_t x = 0; x < ihdr.width; x++) {
+                uint8_t *pixel = row_buffer + (i * ihdr.width + x) * 3;
+                // Convert the pixel to a rgb565 color
+                uint16_t color = ((pixel[0] >> 3) << 11) | ((pixel[1] >> 2) << 5) | (pixel[2] >> 3);
+
+                if (zoom) {
+                    extapp_pushRectUniform(OffsetX + x*2, OffsetY + (y+i)*2, 2, 2, color);
+                } else {
+                    extapp_pushRectUniform(OffsetX + x, OffsetY + y+i, 1, 1, color);
+                }
+            }
+        }
+    }
+
+    free(row_buffer);
+    spng_ctx_free(ctx);
+    return 1;
+}
+
+void extapp_main() {
     //Take the palette of the using the pull function.
     int ToolbarPalette;
     extapp_pullRect(0, 0, 1, 1, &ToolbarPalette);
@@ -97,8 +181,9 @@ void extapp_main() {
         extapp_msleep(2000);
         return;
     }
+
     //list of the images
-    const char* filenames[8];  // Define an array of const char* pointers
+    const char* filenames[8];
     int NumberOfImage = extapp_fileListWithExtension(filenames, 8, ".png", EXTAPP_FLASH_FILE_SYSTEM);
 
     if (NumberOfImage == 0) {
@@ -109,120 +194,24 @@ void extapp_main() {
         return;
     }
 
-    //Start a loop that will display the images.
     int Loop = 1;
     int ImageNum = 0;
     int ImageTotal = NumberOfImage;
     int Drawn = 1;
-    int Zoom = 1;
+    int Zoom = 0;
+
     while (Loop == 1) {
-        //Test if the user want to exit the app.
         if (extapp_isKeydown(5) || extapp_isKeydown(6) || extapp_isKeydown(7) || extapp_isKeydown(52)) {
             Loop = 0;
             break;
         }
+
         if (Drawn == 1) {
-            int freeImage = 0;
-            int freeCtx = 0;
-            //Read the image from the file.
-            size_t len;
-            const char *file_content = extapp_fileRead(filenames[ImageNum], &len, EXTAPP_FLASH_FILE_SYSTEM);
-            if (!file_content) {
-                draw_screen(filenames[ImageNum], " ", ImageNum + 1, ImageTotal, ToolbarPalette, BackgroundPalette, TextPalette);
-                extapp_drawTextLarge("Failed to read file", 80, 111, TextPalette, BackgroundPalette, false);
-                Drawn = 0;
-                goto Error;
-            }
-            //Decode the image.
-            spng_ctx *ctx = spng_ctx_new(0);
-            if (!ctx) {
-                draw_screen(filenames[ImageNum], " ", ImageNum + 1, ImageTotal, ToolbarPalette, BackgroundPalette, TextPalette);
-                extapp_drawTextLarge("Failed to create spng context", 80, 111, TextPalette, BackgroundPalette, false);
-                Drawn = 0;
-                goto Error;
-
-            }
-            spng_set_png_buffer(ctx, file_content, len);
-            if (spng_decoded_image_size(ctx, SPNG_FMT_RGB8, &len)) {
-                draw_screen(filenames[ImageNum], " ", ImageNum + 1, ImageTotal, ToolbarPalette, BackgroundPalette, TextPalette);
-                extapp_drawTextLarge("Failed to get image size", 80, 111, TextPalette, BackgroundPalette, false);
-                Drawn = 0;
-                goto Error;
-            }
-            //Take the image size
-            char DimensionBuffer[50];
-            struct spng_ihdr ihdr;
-            if (spng_get_ihdr(ctx, &ihdr)) {
-                draw_screen(filenames[ImageNum], " ", ImageNum + 1, ImageTotal, ToolbarPalette, BackgroundPalette, TextPalette);
-                extapp_drawTextLarge("Failed to get image size", 80, 111, TextPalette, BackgroundPalette, false);
-                Drawn = 0;
-                goto Error;
-            }
-            if (ihdr.width * ihdr.height > 8100) {
-                draw_screen(filenames[ImageNum], " ", ImageNum + 1, ImageTotal, ToolbarPalette, BackgroundPalette, TextPalette);
-                extapp_drawTextLarge("Image is too large", 80, 111, TextPalette, BackgroundPalette, false);
-                Drawn = 0;
-                goto Error;
-            }
-            my_sprintf(DimensionBuffer, "%dx%d", ihdr.width, ihdr.height);
-            draw_screen(filenames[ImageNum], DimensionBuffer, ImageNum + 1, ImageTotal, ToolbarPalette, BackgroundPalette, TextPalette);
-
-            //Print the image
-            uint8_t *image = malloc(len);
-            freeImage = 1;
-            if (!image) {
-                draw_screen(filenames[ImageNum], " ", ImageNum + 1, ImageTotal, ToolbarPalette, BackgroundPalette, TextPalette);
-                extapp_drawTextLarge("Failed to allocate memory", 80, 111, TextPalette, BackgroundPalette, false);
-                Drawn = 0;
-                goto Error;
-            }
-            if (spng_decode_image(ctx, image, len, SPNG_FMT_RGB8, 0)) {
-                draw_screen(filenames[ImageNum], " ", ImageNum + 1, ImageTotal, ToolbarPalette, BackgroundPalette, TextPalette);
-                extapp_drawTextLarge("Failed to decode image", 80, 111, TextPalette, BackgroundPalette, false);
-                Drawn = 0;
-                goto Error;
-            }
-            freeCtx = 1;
-            //Draw the image on the screen.
-
-            if (Zoom == 1) {
-                int OffsetX = 320 / 2 - ihdr.width / 2;
-                int OffsetY = 220 / 2 - ihdr.height / 2 + 18;
-                for (int x = 0; x < ihdr.width; x++) {
-                    for (int y = 0; y < ihdr.height; y++) {
-                        uint8_t *pixel = image + (y * ihdr.width + x) * 3;
-                        // Convert the pixel to a rgb565 color
-                        uint16_t color = ((pixel[0] >> 3) << 11) | ((pixel[1] >> 2) << 5) | (pixel[2] >> 3);
-                        extapp_pushRectUniform(OffsetX + x, OffsetY + y, 1, 1, color);
-                    }
-                }
-            } else {
-                int OffsetX = 320 / 2 - ihdr.width;
-                int OffsetY = 220 / 2 - ihdr.height + 18;
-                for (int x = 0; x < ihdr.width; x++) {
-                    for (int y = 0; y < ihdr.height; y++) {
-                        uint8_t *pixel = image + (y * ihdr.width + x) * 3;
-                        // Convert the pixel to a rgb565 color
-                        uint16_t color = ((pixel[0] >> 3) << 11) | ((pixel[1] >> 2) << 5) | (pixel[2] >> 3);
-                        extapp_pushRectUniform(OffsetX + x * 2, OffsetY + y * 2, 2, 2, color);
-                    }
-                }
-            }
-            //Goto here if there is a problem with the image.
-            Error:
+            draw_screen(filenames[ImageNum], "Loading...", ImageNum + 1, ImageTotal, ToolbarPalette, BackgroundPalette, TextPalette);
             Drawn = 0;
-            if (freeImage) {
-                free(image);
-                freeImage = 0;
-            }
-            if (freeCtx) {
-                spng_ctx_free(ctx);
-                freeCtx = 0;
-            }
-
+            decode_and_display_png(filenames[ImageNum], ImageNum, ImageTotal, Zoom, ToolbarPalette, BackgroundPalette, TextPalette);
         }
 
-        //Test if the user want to change image.
         if (extapp_isKeydown(3)) {
             if (ImageTotal > 1) {
                 ImageNum++;
@@ -244,14 +233,18 @@ void extapp_main() {
             }
         }
         if (extapp_isKeydown(46)) {
-            Zoom = 1;
-            Drawn = 1;
-            extapp_msleep(200);
+            if (Zoom == 1) {
+                Zoom = 0;
+                Drawn = 1;
+                extapp_msleep(200);
+            }
         }
         if (extapp_isKeydown(45)) {
-            Zoom = 0;
-            Drawn = 1;
-            extapp_msleep(200);
+            if (Zoom == 0) {
+                Zoom = 1;
+                Drawn = 1;
+                extapp_msleep(200);
+            }
         }
     }
     return 0;
