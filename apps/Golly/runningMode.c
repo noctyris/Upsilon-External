@@ -13,6 +13,7 @@ void handleRunningMode(Cell(*cells)[COLUMNS], Cell(*newCells)[COLUMNS], bool *pa
         case SCANCODE_Back:
             *paused = true;
             drawCellsColor(cells);
+	    waitForKeyReleased();
             break;
         case SCANCODE_Plus:
             *speed = (*speed < 10) ? (*speed + 1) : *speed;
