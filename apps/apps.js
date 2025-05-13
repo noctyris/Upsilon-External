@@ -3,7 +3,7 @@
 angular.module('nwas').service('apps', function() {
   return [
     { name: "Fractal", description: {en: "Fractal generator (W/B)", fr: "Générateur de fractales (N/B)"} },
-    { name: "Golly", description: {en: "Game of Life by John Conway", fr: "Jeu de la vie de John Conway"} },
+    { name: "Golly", description: {en: "Game of Life imagined by John Conway", fr: "Jeu de la vie imaginé par John Conway"} },
     { name: "KhiCAS", description: {en: "Computer algebra system", fr: "Système de calcul formel"} },
     { name: "Periodic", description: {en: "Periodic table of elements", fr: "Tableau périodique des éléments"} },
     { name: "Nofrendo", description: {en: "NES emulator", fr: "Émulateur NES"} },
