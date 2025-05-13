@@ -1,4 +1,4 @@
-#define NSPIRE_FILEBUFFER 32768
+#define NSPIRE_FILEBUFFER 512*1024
   // Character codes
 #define KEY_CHAR_0          0x30
 #define KEY_CHAR_1          0x31
@@ -196,3 +196,4 @@
 #define KEY_PRGM_ALPHA 77 
 #define KEY_PRGM_SHIFT 78
 #define KEY_PRGM_MENU 48
+#define KEY_CTRL_SD         39990

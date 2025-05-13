@@ -26,6 +26,10 @@ void extapp_main() {
   ext_main();
 }
 
+bool iskeydown(int key) {
+  return extapp_isKeydown(key);
+}
+
 uint64_t millis() {
   return extapp_millis();
 }
@@ -191,11 +195,6 @@ bool alphawasactive () {
 
 int getkey(int allow_suspend) {
   return extapp_getKey(allow_suspend, &alphawasactive_);
-}
-
-
-bool iskeydown(int key) {
-  return extapp_isKeydown(key);
 }
 
 void GetKey(int * key) {

@@ -112,6 +112,10 @@ clock_t times (struct tms *__buffer) {
 #include <gsl/gsl_fft_complex.h>
 #include <gsl/gsl_fft_real.h>
 #endif
+#if defined GIAC_HAS_STO_38 || defined NSPIRE || defined NSPIRE_NEWLIB || defined FXCG || defined GIAC_GGB || defined USE_GMP_REPLACEMENTS || defined KHICAS
+#else
+#include "signalprocessing.h"
+#endif
 #ifndef HAVE_PNG_H
 #undef HAVE_LIBPNG
 #endif
@@ -412,6 +416,7 @@ namespace giac {
     intvar_counter=0;
     realvar_counter=0;
     if (args==at_solve) return 1;
+    //clear_context((context *) contextptr);
     init_context((context *) ((void *) contextptr));
     gen res= _rm_all_vars(args,contextptr);
     *logptr(contextptr) << "============== restarted ===============" << '\n';
@@ -508,7 +513,7 @@ namespace giac {
   gen _time(const gen & a,GIAC_CONTEXT){
     if ( a.type==_STRNG && a.subtype==-1) return  a;
     if (a.type==_VECT && a.subtype==_SEQ__VECT){
-#if defined VISUALC || defined __MINGW_H
+#if !defined GIAC_HAS_STO_38 && (defined VISUALC || defined __MINGW_H)
     struct _timeb timebuffer;
     _ftime(&timebuffer);
     return timebuffer.time+double(timebuffer.millitm)/1000;
@@ -567,7 +572,7 @@ namespace giac {
     eval(a,level,contextptr);
     return (emcctime()-t1)/1e6;
 #endif
-#if defined VISUALC || defined __MINGW_H
+#if !defined GIAC_HAS_STO_38 && (defined VISUALC || defined __MINGW_H)
     struct _timeb timebuffer0,timebuffer1;
     _ftime(&timebuffer0);
     for (;i<1000;){ // do it 10 times more
@@ -1860,6 +1865,7 @@ namespace giac {
     }
   }
 
+#ifdef KHICAS
   bool read_audio(vecteur & v,int & channels,int & sample_rate,int & bits_per_sample,unsigned int & data_size){
     convert_double_int(v);
     if (v.size()>1 && v[1].type!=_VECT)
@@ -2297,6 +2303,7 @@ namespace giac {
   define_unary_function_ptr5( at_writewav ,alias_at_writewav,&__writewav,0,true);
 
 #endif // RTOS_THREADX
+#endif
 
   static gen animate2d3d(const gen & g,bool dim3,GIAC_CONTEXT){
     int s=0,frames=10;
@@ -2462,9 +2469,11 @@ namespace giac {
 #endif // LIBPNG
 
   gen _writergb(const gen & g,GIAC_CONTEXT){
-    if ( g.type==_STRNG && g.subtype==-1) return  g;
+    if ( g.type==_STRNG && g.subtype==-1) return g;
+    if (g.type!=_VECT || g.subtype!=_SEQ__VECT || g._VECTptr->size()!=2 || g._VECTptr->front().type!=_STRNG)
+      return gensizeerr(contextptr);
     vecteur v(gen2vecteur(g));
-    if (ckmatrix(v[1])){
+    if (v.size()>=2 && ckmatrix(v[1])){
       int l,c;
       mdims(*v[1]._VECTptr,l,c);
       vecteur w(1,makevecteur(v.size()==2?1:4,c,l));
@@ -2475,8 +2484,14 @@ namespace giac {
       }
       v=makevecteur(v[0],w);
     }
-    if (v.size()!=2 || v[0].type!=_STRNG || v[1].type!=_VECT)
+    if (v.size()<2 || v[0].type!=_STRNG || v[1].type!=_VECT)
       return gensizeerr();
+#if defined GIAC_HAS_STO_38 || defined NSPIRE || defined NSPIRE_NEWLIB || defined FXCG || defined GIAC_GGB || defined USE_GMP_REPLACEMENTS || defined KHICAS || defined EMCC || defined EMCC2
+#else
+    rgba_image *img=rgba_image::from_gen(v[1]);
+    if (img!=NULL)
+      return img->write_png(v[0]._STRNGptr->c_str())==0?1:0;
+#endif
     vecteur w=*v[1]._VECTptr;
     // w[0]==[d,w,h], w[1..4]=data
     bool ok= writergb(*v[0]._STRNGptr,w);

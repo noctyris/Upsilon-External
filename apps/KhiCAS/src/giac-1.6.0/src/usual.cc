@@ -2749,8 +2749,12 @@ namespace giac {
 
   // static symbolic symb_acosh(const gen & e){  return symbolic(at_cosh,e);  }
   static gen acoshasln(const gen & x,GIAC_CONTEXT){
-    if (re(x,contextptr)==x)
-      return ln(x+sqrt(x*x-1,contextptr),contextptr); // avoid multiple sqrt but it's the opposite for example for x non real
+    if (re(x,contextptr)==x){
+      gen res=ln(x+sqrt(x*x-1,contextptr),contextptr);
+      if (is_positive(-x,contextptr))
+	return -res; // avoid multiple sqrt but it's the opposite for example for x non real
+      return res;
+    }
     return ln(x+sqrt(x+1,contextptr)*sqrt(x-1,contextptr),contextptr);
   }
   gen acosh(const gen & e0,GIAC_CONTEXT){
@@ -6452,8 +6456,8 @@ namespace giac {
 
   static symbolic symb_quorem(const gen & a,const gen & b){    return symbolic(at_quorem,makevecteur(a,b));  }
   gen quorem(const gen & a,const gen & b){
-    if ((a.type!=_VECT) || (b.type!=_VECT))
-      return symb_quorem(a,b);
+    if (a.type!=_VECT || b.type!=_VECT)
+      return quorem(gen2vecteur(a),gen2vecteur(b));
     if (b._VECTptr->empty())
       return gensizeerr(gettext("Division by 0"));
     vecteur q,r;
@@ -6472,7 +6476,8 @@ namespace giac {
       return _revlist(_greduce(gen(v,_SEQ__VECT),contextptr),contextptr);
     }
     vecteur & a =*args._VECTptr;
-    if ( (a.front().type==_VECT) && (a[1].type==_VECT))
+    if ( // a.front().type==_VECT && 
+	a[1].type==_VECT )
       return quorem(a.front(),a[1]);
     if ( (a.front().type==_POLY) && (a[1].type==_POLY)){
       int dim=a.front()._POLYptr->dim;
@@ -9163,10 +9168,12 @@ namespace giac {
 	// by series expansion at x=0
 	// x*sum( (-1)^n*(x^2)^n/n!/(2*n+1),n=0..inf)
 	complex_long_double z2=z*z,res=0,pi=1;
+	//*logptr(contextptr) << "erf z " << z << '\n';
 	for (long_double n=0;;){
 	  res += pi/(2*n+1);
 	  ++n;
 	  pi = -pi*z2/n;
+	  // if (n<10) *logptr(contextptr) << "res " << res << "\n pi " << pi << '\n';
 	  if (complex_long_abs(pi)<1e-17)
 	    break;
 	}
@@ -9211,6 +9218,7 @@ namespace giac {
 	erfc=2-erfc;
 	return -e;
       }
+#ifndef HAVE_LIBMPFR
       else { 
 	// continued fraction
 	// 2*exp(z^2)*int(exp(-t^2),t=z..inf)=1/(z+1/2/(z+1/(z+3/2/(z+...))))
@@ -9225,12 +9233,17 @@ namespace giac {
 #endif
 	res=std::exp(-z*z)*res/complex_long_double(std::sqrt(M_PI));
 	erfc=gen(double(res.real()),double(res.imag()));
+	if (std::abs(z.real())<=1e-2*std::abs(z.imag())){
+	  *logptr(contextptr) << "Low accuracy\n";
+	  return -erfc;
+	}
 	gen e=1-erfc;
 	if (!neg)
 	  return e;
 	erfc=2-erfc;
 	return -e;
       }
+#endif // HAVE_LIBMPFR
     } // end low precision
     // take account of loss of accuracy
     int prec=decimal_digits(contextptr);
@@ -11210,6 +11223,63 @@ namespace giac {
     of << deg2rad_e << " " << '\n';
 #endif
   }
+
+#if defined GIAC_HAS_STO_38 || defined NSPIRE || defined NSPIRE_NEWLIB || defined FXCG || defined GIAC_GGB || defined USE_GMP_REPLACEMENTS || defined KHICAS
+#else
+  // additions by L. Marohnić:
+  string to_unix_path(const string &path) {
+    string ret;
+    ret.reserve(path.size());
+    string::const_iterator it=path.begin(),itend=path.end();
+    for (;it!=itend;++it) {
+      switch (*it) {
+      case '\\':
+        ret.push_back('/');
+        break;
+      default:
+        ret.push_back(*it);
+        break;
+      }
+    }
+    return ret;
+  }
+  /* Create a temporary file name (using the fallback filename if tmpnam fails).
+   * Optionally, extension EXT may be specified, without the leading dot.*/
+  string temp_file_name(const char *fallback_name,const char *ext) {
+    char buf[L_tmpnam];
+    bool has_temp_file=(tmpnam(buf)!=NULL);
+    string tmpname(has_temp_file?buf:fallback_name);
+#ifdef _WIN32
+    string tmpdir=getenv("TEMP")?getenv("TEMP"):"c:\\Users\\Public\\";
+    tmpname=tmpdir+tmpname;
+    if (tmpname[tmpname.size()-1]=='.')
+        tmpname.erase(tmpname.begin()+tmpname.size()-1);
+#endif
+    if (ext!=NULL)
+      tmpname+="."+string(ext);
+    return tmpname;
+  }
+  /* Return true iff the file FNAME exists. */
+  bool ckfileexists(const char *fname) {
+    if (FILE *f=fopen(fname,"r")) {
+      fclose(f);
+      return true;
+    }
+    return false;
+  }
+  temp_file::temp_file(const char *fallback_name,const char *ext) {
+    _fname=temp_file_name(fallback_name,ext);
+    handle=fopen(_fname.c_str(),"wb+");
+  }
+  temp_file::~temp_file() {
+    if (ckfileexists(_fname.c_str())) {
+      if (handle!=NULL)
+        fclose(handle);
+      if (remove(_fname.c_str())!=0 && debug_infolevel)
+        cerr << gettext("Failed to remove temporary file") << " '" << _fname << "'\n";
+    }
+  }
+#endif
 
 #ifndef NO_NAMESPACE_GIAC
 } // namespace giac

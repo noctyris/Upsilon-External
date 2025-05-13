@@ -516,15 +516,53 @@ namespace giac {
       }
     }
     new_seq.push_back( monome(res ,old_pow ));
+    final_seq.clear();
+    sparse_poly1::const_iterator it=new_seq.begin();
+    sparse_poly1::const_iterator itend=new_seq.end();
+    const int MAXS=512;
+    int m=MAXS,M=-MAXS,N=itend-it;
+    final_seq.reserve(N);
+#ifdef FXCG
+    if (N<MAXS){
+      for (;it!=itend;++it){
+	if (it->exponent.type!=_INT_)
+	  break;
+	int cur=it->exponent.val;
+	if (cur<m)
+	  m=cur;
+	if (cur>M)
+	  M=cur;
+      }
+      if (it==itend){
+	gen tab[M-m+1];
+	memset(tab,sizeof(tab),0);
+	for (it=new_seq.begin();it!=itend;++it){
+	  tab[it->exponent.val-m] += it->coeff;
+	}
+	for (int i=m;i<=M;++i){
+	  gen res=tab[i-m];
+	  if (is_zero(res))
+	    continue;
+	  if (is_undef(res)){
+	    final_seq.push_back(monome(res,i));
+	    return true;
+	  }
+	  if (series_flags(contextptr) & 0x1)
+	    res=recursive_normal(res,contextptr);
+	  if (!is_zero(res))
+	    final_seq.push_back(monome(res,i));
+	}
+	return true;
+      }
+    }
+#endif
     // COUT << new_seq << '\n';
     // sort by asc. power
     sort( new_seq.begin(),new_seq.end(),monome_less());
     // COUT << "Sorted" << new_seq << '\n';
     // add terms with same power
-    sparse_poly1::const_iterator it=new_seq.begin();
-    sparse_poly1::const_iterator itend=new_seq.end();
-    final_seq.clear();
-    final_seq.reserve(itend-it);
+    it=new_seq.begin();
+    // itend=new_seq.end();
     while (it!=itend){
       gen res=it->coeff;
       gen pow=it->exponent;
@@ -1616,6 +1654,11 @@ namespace giac {
 	    return false;
 	  for (int i=1;i<ordre;i++){
 	    gen add= limit(fdiff,*k._IDNTptr,upper,-1,contextptr)-limit(fdiff,*k._IDNTptr,lower,1,contextptr);
+	    gen chk=limit(add/pow(x,2*i-2),x,0,1,contextptr);
+	    if (!is_zero(chk)){
+	      ordre=2*i-3;
+	      break;
+	    }
 	    add=add*bernoulli(2*i)/factorial(2*i);
 	    eff += add; // fdiff flimdiff 2 fois
 	    fdiff=derive(fdiff,k,contextptr);
@@ -1623,11 +1666,16 @@ namespace giac {
 	    if (is_undef(fdiff))
 	      return false;
 	  }
+	  // find order of add
 	  // must do a recursive call since eff may contain new functions
-	  gen coeff,mrv_var,exponent; 
+	  // FIXME: "Parameters" might depend on x, search for effg 
+	  // example series(sum(k/n*ln(k/n), k = 1 .. n ),n=inf);
+	  gen Coeff,Mrv_var,Exponent; 
 	  eff =subst(eff,x,inv(x,contextptr),true,contextptr);
-	  if (!mrv_lead_term(eff,x,coeff,mrv_var,exponent,s,ordre,contextptr,true))
+	  if (!mrv_lead_term(eff,x,Coeff,Mrv_var,Exponent,s,ordre,contextptr,true))
 	    return false;
+	  ptruncate(s,ordre,contextptr); // add remainder term
+	  s=subst(s,x,inv(x,contextptr),true,contextptr);
 	  lvx_s.push_back(s);
 	  continue;
 	  // never reached setsizeerr();
@@ -2342,7 +2390,7 @@ namespace giac {
 	  gen tmp;
 	  if (v[i]._SYMBptr->feuille.type==_VECT && v[i]._SYMBptr->feuille._VECTptr->size()==4){
 	    vecteur & vv=*v[i]._SYMBptr->feuille._VECTptr;
-	    if (derive(vv[2],x,contextptr)==0 && derive(vv[2],x,contextptr)==0)
+	    if (derive(vv[2],x,contextptr)==0 && derive(vv[3],x,contextptr)==0)
 	      continue;
 	  }
 	  if (!convert_to_euler_mac_laurin(v[i],x,tmp,contextptr))
@@ -2522,8 +2570,18 @@ namespace giac {
       return gen(res,e0.subtype);
     }
     if (_about(x,contextptr)!=x){
-      identificateur xprime(" "+print_INT_(giac_rand(contextptr)));
-      return in_limit(quotesubst(e0,x,xprime,contextptr),xprime,lim_point,direction,contextptr);
+      vecteur l(lvar(e0));
+      for (int i=0;;++i){
+	gen X("x"+print_INT_(i),contextptr);
+	if (X.type!=_IDNT || equalposcomp(l,X))
+	  continue;
+	if (_about(X,contextptr)!=X)
+	  continue;
+	return in_limit(quotesubst(e0,x,X,contextptr),*X._IDNTptr,lim_point,direction,contextptr);
+      }
+      // never reached
+      gen xprime("x"+print_INT_(giac_rand(contextptr)),contextptr);
+      return in_limit(quotesubst(e0,x,xprime,contextptr),*xprime._IDNTptr,lim_point,direction,contextptr);
     }
     gen e=Heavisidetosign(when2sign(piecewise2when(e0,contextptr),contextptr),contextptr);
     // Adjust direction for +/- inf limits
@@ -2535,9 +2593,10 @@ namespace giac {
     if (has_i(lop(e,at_ln)))
       e=recursive_normal(expln2trig(e,contextptr),contextptr);
     vecteur vsign(loptab(e,sign_floor_ceil_round_tab));
-    if (0 && direction && !vsign.empty() && !equalposcomp(sign_floor_ceil_round_tab,e._SYMBptr->sommet)){
+    if (//0 && 
+	direction && !vsign.empty() && !equalposcomp(sign_floor_ceil_round_tab,e._SYMBptr->sommet)){
       // evaluate vsign first
-      vecteur res;
+      vecteur res(vsign.size());
       for (int i=0;i<int(vsign.size());++i){
 	res[i]=in_limit(vsign[i],x,lim_point,direction,contextptr);
       }
@@ -2944,8 +3003,19 @@ namespace giac {
     // At the end replace w by 1/w if w -> plus_inf
     bool dont_invert=is_zero(in_limit(faster_var.front(),x,plus_inf,0,contextptr));
     vecteur faster_var_tmp(faster_var);
+#if 1 // FXCG
+    tri_rlvarx(faster_var); 
+#else
     stable_sort(faster_var.begin(),faster_var.end(),symb_size_less_t());
-    identificateur w(" w");
+#endif
+    vecteur ecopyv(lidnt(ecopy));
+    string ws("w");
+    identificateur w(ws); 
+    // create free identifier, not present in ecopy
+    while (equalposcomp(ecopyv,w)){
+      ws+='_';
+      w=identificateur(ws);
+    }
     vecteur faster_var_subst(1,w);
     gen g=faster_var.front()._SYMBptr->feuille;
     iterateur it=faster_var.begin()+1,itend=faster_var.end();
@@ -2970,6 +3040,8 @@ namespace giac {
       f=subst(f,w,inv(w,contextptr),false,contextptr);
     if (faster_var.front().is_symb_of_sommet(at_exp)){
       // replace ln(exp(g)^k*...) by k*g+ln(...)
+      // where g=ln(w)
+      gen effg(g); // symbolic(at_ln,w)); does not work
       vecteur lf(lop(f,at_ln)),lf1,lf2;
       iterateur it=lf.begin(),itend=lf.end();
       for (;it!=itend;++it){
@@ -2979,7 +3051,7 @@ namespace giac {
 	  if (!is_zero(p.front().exponent))
 	    argln=argln*symbolic(at_pow,gen(makevecteur(w,-p.front().exponent),_SEQ__VECT));
 	  lf1.push_back(*it);
-	  lf2.push_back(p.front().exponent*(dont_invert?g:-g)+symbolic(at_ln,argln));
+	  lf2.push_back(p.front().exponent*(dont_invert?effg:-effg)+symbolic(at_ln,argln));
 	}
       }
       if (!lf1.empty())
@@ -3584,14 +3656,14 @@ namespace giac {
       gen f0=f._VECTptr->front();
       gen x =f[1];
       if (x.type!=_IDNT){
-	*logptr(contextptr) << gettext("Unable to convert to euler mac laurin");
+	*logptr(contextptr) << gettext("Unable to convert to euler mac laurin") << ' ';
 	return false;
       }
       gen f0prime=derive(f0,x,contextptr), f03=derive(f0prime,x,contextptr);
       f03=derive(f03,x,contextptr);
       if (is_undef(f03)) return false;
       l=in_limit(f03/f0prime,n,plus_inf,1,contextptr);
-      if (!is_zero(l))
+      if (!is_zero(l)) 
 	return false;
       gen remains;
       gen F0=integrate_gen_rem(f0,x,remains,0,contextptr);

@@ -18,6 +18,7 @@
  */
 #ifndef _GIAC_GLOBAL_H
 #define _GIAC_GLOBAL_H
+//#define USE_OBJET_BIDON
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -369,6 +370,7 @@ Boolean isLegalUTF8Sequence(const UTF8 *source, const UTF8 *sourceEnd);
   extern int GAMMA_LIMIT;
   extern int LIST_SIZE_LIMIT;
   extern int NEWTON_DEFAULT_ITERATION;
+  extern int NEWTON_MAX_RANDOM_RESTART;
   extern int DEFAULT_EVAL_LEVEL;
   extern int PARENTHESIS_NWAIT;
   extern int MAX_PROD_EXPAND_SIZE;
@@ -814,6 +816,7 @@ throw(std::runtime_error("Stopped by user interruption.")); \
 
   context * clone_context(const context *);
   void init_context(context * ptr);
+  void clear_context(context * ptr);
 
   extern const context * context0;
   std::vector<context *> & context_list();

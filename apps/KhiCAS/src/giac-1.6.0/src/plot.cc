@@ -128,10 +128,11 @@ extern "C" {
 #endif
 
 #if defined GIAC_HAS_STO_38 || defined NSPIRE || defined NSPIRE_NEWLIB || defined FXCG || defined GIAC_GGB || defined USE_GMP_REPLACEMENTS || defined KHICAS
-inline bool is_graphe(const giac::gen &g,std::string &disp_out,const giac::context *){ return false; }
+inline bool is_graphe(const giac::gen &g){ return false; }
 inline giac::gen _graph_vertices(const giac::gen &g,const giac::context *){ return g;}
 inline giac::gen _is_planar(const giac::gen &g,const giac::context *){ return g;}
 #else
+#include "signalprocessing.h"
 #include "graphtheory.h"
 #endif
 
@@ -567,6 +568,7 @@ namespace giac {
   }
 #endif
 
+  bool gnuplot_opengl=false;
 #ifdef WITH_GNUPLOT
   vecteur plot_instructions;
 
@@ -1067,8 +1069,23 @@ namespace giac {
       if (s[i]=='.')
 	break;
     }
-    if (i+ndigits+1<l)
-      s[i+ndigits+1]=0;
+    i += ndigits+1;
+    if (i<l){
+      if (s[i-1]=='e' || s[i-2]=='e')
+	return s;
+      int j;
+      for (j=i;j<l;++j){
+	// exponent?
+	if (s[j]=='e' || s[j]=='E'){
+	  // move from j to l -> i
+	  for (;j<l;++j,++i){
+	    s[i]=s[j];
+	  }
+	  break;
+	}
+      }
+      s[i]=0;
+    }
 #else
     ndigits=ndigits<2?2:ndigits;
     ndigits=ndigits>15?15:ndigits;
@@ -1083,29 +1100,28 @@ namespace giac {
     k %= 126;
     if (k<0)
       k += 126;
-    if (k<21){
-      r=251; g=0; b=12*k;
+    if (k<63){
+      if (k<21){
+	r=251; g=0; b=12*k; return;
+      }
+      if (k>=21 && k<42){
+	r=251-(12*(k-21)); g=0; b=251; return ;
+      } 
+      if (k>=42 && k<63){
+	r=0; g=(k-42)*12; b=251; return;
+      }
     }
-    if (k>=21 && k<42){
-      r=251-(12*(k-21)); g=0; b=251;
-    } 
-    if (k>=42 && k<63){
-      r=0; g=(k-42)*12; b=251;
-    } 
-    if (k>=63 && k<84){
-      r=0; g=251; b=251-(k-63)*12;
-    } 
-    if (k>=84 && k<105){
-      r=(k-84)*12; g=251; b=0;
-    } 
-    if (k>=105 && k<126){
-      r=251; g=251-(k-105)*12; b=0;
-    } 
-  }
-
-  int rgb888to565(int c){
-    int r=(c>>16)&0xff,g=(c>>8)&0xff,b=c&0xff;
-    return (((r*32)/256)<<11) | (((g*64)/256)<<5) | (b*32/256);
+    else {
+      if (k>=63 && k<84){
+	r=0; g=251; b=251-(k-63)*12; return;
+      } 
+      if (k>=84 && k<105){
+	r=(k-84)*12; g=251; b=0; return;
+      } 
+      if (k>=105 && k<126){
+	r=251; g=251-(k-105)*12; b=0; return;
+      }
+    }
   }
 
   static const int arc_en_ciel_colors=15;
@@ -1540,7 +1556,7 @@ namespace giac {
 	  if (debug_infolevel)
 	    CERR << y << " not real at " << i << " value " << yy << " type " << int(yy.type) << '\n';
 	  if (!chemin.empty())
-	    res.push_back(pnt_attrib(symb_curve(gen(makevecteur(vars+cst_i*f,vars,xmin,i,showeq),_PNT__VECT),gen(chemin,_GROUP__VECT)),attributs.empty()?color:attributs,contextptr));
+	    res.push_back(pnt_attrib(symb_curve(gen(makevecteur(vars+cst_i*f,vars,xmin,i-step,showeq),_PNT__VECT),gen(chemin,_GROUP__VECT)),attributs.empty()?color:attributs,contextptr));
 	  xmin=i;
 	  chemin.clear();
 	  continue;
@@ -1582,7 +1598,7 @@ namespace giac {
 	      CERR << y << " step at " << i << " " << yy << '\n';
 	      CERR << "curve " << chemin.size() << " " << chemin.front() << " .. " << chemin.back() << '\n';
 	    }
-	    res.push_back(pnt_attrib(symb_curve(gen(makevecteur(vars+cst_i*f,vars,xmin,i,showeq),_PNT__VECT),gen(chemin,_GROUP__VECT)),attributs.empty()?color:attributs,contextptr));
+	    res.push_back(pnt_attrib(symb_curve(gen(makevecteur(vars+cst_i*f,vars,xmin,i-step,showeq),_PNT__VECT),gen(chemin,_GROUP__VECT)),attributs.empty()?color:attributs,contextptr));
 	  }
 	  xmin=i;
 	  chemin=vecteur(1,gen(i,j));
@@ -1770,7 +1786,7 @@ namespace giac {
 	    if (fval._DOUBLE_val>fmax)
 	      fmax=fval._DOUBLE_val;
 	  }
-#if defined KHICAS || defined GIAC_HAS_STO_38 // FIXME format is not translatable, etc.
+#if defined KHICAS || defined GIAC_HAS_STO_38 // || defined HYPERSURFACE3 FIXME format is not translatable, etc.
 	  if (!densityplot){
 	    tmp.push_back(x); tmp.push_back(y); tmp.push_back(fval);
 	  } 
@@ -3491,8 +3507,8 @@ namespace giac {
 #else
     ee.subtype=-1;
 #endif
-    history_plot(contextptr).push_back(ee);
 #ifndef KHICAS
+    history_plot(contextptr).push_back(ee);
     if (io_graph(contextptr))
       __interactive.op(ee,contextptr);
 #endif
@@ -6074,6 +6090,8 @@ namespace giac {
 	loop=false;
       else if (res.type==_SYMB && has_i(res))
 	loop=false;
+      if (res.is_symb_of_sommet(at_curve))
+	loop=true; /* workaround for ggb area([circle(x^(2)+4y^(2)=1)]) */
       if (loop){
 	res=0;
 	for (unsigned i=0;i<args._VECTptr->size();++i)
@@ -7533,8 +7551,7 @@ namespace giac {
 
   gen _sommets(const gen & args,GIAC_CONTEXT){
     if ( args.type==_STRNG && args.subtype==-1) return  args;
-    string s;
-    if (is_graphe(args,s,contextptr))
+    if (is_graphe(args))
       return _graph_vertices(args,contextptr);
     if (args.type==_VECT && args.subtype==_SEQ__VECT && args._VECTptr->size()==2){
       gen g=_sommets(args._VECTptr->front(),contextptr);
@@ -7555,8 +7572,7 @@ namespace giac {
 
   gen _faces(const gen & args,GIAC_CONTEXT){
     if ( args.type==_STRNG && args.subtype==-1) return  args;
-    string s;
-    if (is_graphe(args,s,contextptr)){
+    if (is_graphe(args)){
       identificateur faces;
       gen ret=_is_planar(makesequence(args,faces),contextptr);
       gen retval=is_one(ret)?_eval(faces,contextptr):ret;
@@ -8718,7 +8734,13 @@ namespace giac {
 	chemin.push_back(gen(i,j));
       else {
 	if (!chemin.empty())
-	  res.push_back(symb_pnt(symb_curve(gen(makevecteur(fC,vars,function_tmin,t,0,equation,parameq,vparam),_PNT__VECT),gen(chemin,_GROUP__VECT)),attribut,contextptr));
+	  res.push_back(symb_pnt(symb_curve(gen(makevecteur(fC,vars,function_tmin,
+#if 0
+							    t,
+#else
+							    t-function_tstep,
+#endif
+							    0,equation,parameq,vparam),_PNT__VECT),gen(chemin,_GROUP__VECT)),attribut,contextptr));
 	function_tmin=t;
 	chemin=vecteur(1,gen(i,j));
       }
@@ -8726,7 +8748,13 @@ namespace giac {
       oldj=j;
     }
     if (!chemin.empty())
-      res.push_back(symb_pnt(symb_curve(gen(makevecteur(fC,vars,function_tmin,function_tmax,0,equation,parameq,vparam),_PNT__VECT),gen(chemin,_GROUP__VECT)),attribut,contextptr));
+      res.push_back(symb_pnt(symb_curve(gen(makevecteur(fC,vars,function_tmin,
+#if 0
+							function_tmax,
+#else
+							t-function_tstep,
+#endif
+							0,equation,parameq,vparam),_PNT__VECT),gen(chemin,_GROUP__VECT)),attribut,contextptr));
     leave(protect,localvar,newcontextptr);
     // io_graph(old_io_graph,contextptr);
 #if !defined(WIN32) && defined(WITH_GNUPLOT)
@@ -8961,6 +8989,26 @@ namespace giac {
     if (g.type==_VECT){
       v=*g._VECTptr;
       int s=int(v.size()),nd=0,nargs=0;
+      if (s){
+	vecteur attributs(1,default_color(contextptr));
+	int a=read_attributs(v,attributs,contextptr);
+	if (a==s-1 && attributs!=vecteur(1,default_color(contextptr))){
+	  gen res=_plot(a==1?v.front():gen(vecteur(v.begin(),v.begin()+a),g.subtype),contextptr);
+	  if (res.type==_VECT){
+	    vecteur w=*res._VECTptr;
+	    for (int i=0;i<w.size();++i){
+	      if (w[i].is_symb_of_sommet(at_pnt)){
+		// FIXME keep filled attribute
+		w[i]=pnt_attrib(remove_at_pnt(w[i]),attributs,contextptr);
+	      }
+	    }
+	    res=gen(w,res.subtype);
+	    return res;
+	  } 
+	  res=remove_at_pnt(res);
+	  return pnt_attrib(res,attributs,contextptr);
+	}
+      }
       if (s && v[0].type==_FUNC && (nd=is_distribution(v[0])) && 1+(nargs=distrib_nargs(nd))<=s){
 	if (is_discrete_distribution(nd))
 	  return _histogram(g,contextptr);
@@ -9027,8 +9075,11 @@ namespace giac {
     }
     if (s<1)
       return _plotfunc(g,contextptr);
-    if (g.type==_VECT && g.subtype!=_SEQ__VECT)
+    if (g.type==_VECT && g.subtype!=_SEQ__VECT){
+      if (v.size()==2 && v.back().type!=_VECT)
+	return _plotparam(g,contextptr);
       return plotpoints(v,attributs,contextptr);
+    }
     double xmin=gnuplot_xmin,xmax=gnuplot_xmax,ymin=gnuplot_ymin,ymax=gnuplot_ymax,zmin=gnuplot_zmin,zmax=gnuplot_zmax;
     gen xvar=vx_var,yvar=y__IDNT_e;
     int nstep=gnuplot_pixels_per_eval;
@@ -9670,7 +9721,10 @@ namespace giac {
     // delta=ra^2-rb^2+AB^2
     gen delta=rayon_a2-rayon_b2+ab2;
     gen ab4=centre_a+delta/2/ab2*ab;
-    gen d_perp(sqrt(4*ab2*rayon_a2-pow(delta,2),contextptr)/2/ab2);
+    gen D=4*ab2*rayon_a2-pow(delta,2);
+    if (is_strictly_greater(0,D,contextptr))
+      return vecteur(0);
+    gen d_perp(sqrt(D,contextptr)/2/ab2);
     if (a2d){ // circle inter circle = 2 points (or 1)
       gen ab_perp(im(ab,contextptr)-cst_i*re(ab,contextptr));
       return makevecteur(symb_pnt(ratnormal(ab4+d_perp*ab_perp,contextptr),default_color(contextptr),contextptr),symb_pnt(ratnormal(ab4-d_perp*ab_perp,contextptr),default_color(contextptr),contextptr));
@@ -9756,7 +9810,11 @@ namespace giac {
       prod2frac(eq,num,den);
       eq=vecteur2prod(num);
       eq=normal(eq,contextptr);
-      vecteur res=solve(eq,*vf[1]._IDNTptr,0,contextptr);
+      gen solvex=vf[1];
+      gen xval=assumeeval(solvex,contextptr);
+      giac_assume(symb_and(symb_superieur_egal(solvex,tmin),symb_inferieur_egal(solvex,tmax)),contextptr);
+      vecteur res=solve(eq,*solvex._IDNTptr,0,contextptr);
+      restorepurge(xval,solvex,contextptr);
       int s=int(res.size());
       for (int i=0;i<s;++i){
 	res[i]=symb_pnt(subst(vf[0],vf[1],res[i],false,contextptr),contextptr);
@@ -11062,6 +11120,16 @@ namespace giac {
 	vecteur & valv = *valf._VECTptr;
 	int s = int(valv.size());
 	if (s>1){
+	  gen valv0=valv[0];
+	  if (valv0.is_symb_of_sommet(at_legende)){
+	    valv0=valv0._SYMBptr->feuille;
+	    valv0=valv0[1];
+	    if (valv0.type==_STRNG){
+	      valv0=gen(*valv0._STRNGptr,contextptr);
+	      if (valv0.type<=_SYMB)
+		return valv0;
+	    }
+	  }
 	  gen valv1=valv[1];
 	  if (valv1.type==_VECT && valv1._VECTptr->size()>2){
 	    tmp=(*valv1._VECTptr)[1];
@@ -11126,6 +11194,36 @@ namespace giac {
 
   gen _couleur(const gen & a,GIAC_CONTEXT){
     if (is_undef(a)) return a;
+#if defined GIAC_HAS_STO_38 || defined NSPIRE || defined NSPIRE_NEWLIB || defined FXCG || defined GIAC_GGB || defined USE_GMP_REPLACEMENTS || defined KHICAS || defined EMCC || defined EMCC2
+#else    
+    /* display image, addition by L. Marohnić */
+    rgba_image *img;
+    gen x=0,y=0;
+    if (a.type==_VECT && a.subtype==_SEQ__VECT && a._VECTptr->size()>1 &&
+        (img=rgba_image::from_gen(a._VECTptr->front()))!=NULL) {
+      if ((a._VECTptr->size()>2 && (!is_real_number(x=a._VECTptr->at(1),contextptr) || !is_real_number(y=a._VECTptr->at(2),contextptr))))
+        return gensizeerr(gettext("Invalid image position"));
+      if (a._VECTptr->size()==2) {
+        if (a._VECTptr->back().type==_CPLX) {
+          x=re(a._VECTptr->back(),contextptr);
+          y=im(a._VECTptr->back(),contextptr);
+        } else if (is_real_number(a._VECTptr->back(),contextptr))
+          x=a._VECTptr->back();
+        else return gensizeerr(gettext("Invalid image position"));
+      }
+    } else img=rgba_image::from_gen(a);
+    if (img!=NULL) {
+      if (!img->assure_on_disk())
+        return gensizeerr(gettext("Failed to write image to disk"));
+      vecteur drawing;
+      drawing.push_back(symb_equal(change_subtype(_AXES,_INT_PLOT),0));
+      drawing.push_back(symb_equal(change_subtype(_GL_ORTHO,_INT_PLOT),1));
+      drawing.push_back(symbolic(at_rectangle,makesequence(gen(x,y),gen(x+img->width(),y),fraction(img->height(),img->width()),
+                        symb_equal(change_subtype(_GL_TEXTURE,_INT_PLOT),string2gen(img->file_name(),false)))));
+      return drawing;
+    }
+    /* end display image */
+#endif
     if (a.type==_STRNG){
       *logptr(contextptr) << gettext("Use pencolor for the turtle") << '\n';
       return _couleur(gen(*a._STRNGptr,contextptr),contextptr);
@@ -11834,6 +11932,8 @@ namespace giac {
       is >> type;
       if (type==_FL_WIDGET_POINTER && fl_widget_unarchive_function)
 	return fl_widget_unarchive_function(is);
+    case _USER:
+      return unarchive(is,contextptr);
     case _ZINT:
       return unarchivezint(is,contextptr);
 #if 0 // ndef USE_GMP_REPLACEMENTS
@@ -12002,6 +12102,8 @@ namespace giac {
 	if (galois_field * gf=dynamic_cast<galois_field *>(e._USERptr)){
 	  return os << et << "GF(" << gf->p << "," << gf->P << "," << gf->x << "," << gf->a << ")" << '\n';
 	}
+	os << et << " ";
+	return archive(os,e._USERptr->giac_constructor(contextptr),contextptr);
       }
 #endif
     default:
@@ -12200,8 +12302,9 @@ namespace giac {
       g=_floor(g,0);
       if (g.type!=_INT_)
 	return false; // setsizeerr(contextptr);
-#ifdef WITH_GNUPLOT
       int i=g.val;
+      gnuplot_opengl=(i/4) %2;
+#ifdef WITH_GNUPLOT
       gnuplot_hidden3d=(i %2)!=0;
       i =i/2;
       gnuplot_pm3d=(i%2)!=0;
@@ -12253,7 +12356,7 @@ namespace giac {
     v.push_back(axes);
     v.push_back(class_min);
     v.push_back(class_size);
-    v.push_back(int(gnuplot_hidden3d+2*gnuplot_pm3d));
+    v.push_back(int(gnuplot_hidden3d+2*gnuplot_pm3d+4*gnuplot_opengl));
     return symbolic(at_xyztrange,v);
   }
   gen _xyztrange(const gen & args,GIAC_CONTEXT){
@@ -16576,6 +16679,16 @@ gen _vers(const gen & g,GIAC_CONTEXT){
   // moved from plot3d.cc for implicittex_plot_sommets_alias
   gen _plot3d(const gen & g,const context * contextptr){
     if ( g.type==_STRNG && g.subtype==-1) return  g;
+    if (g.type!=_VECT){
+      vecteur v(lidnt(eval(g,1,contextptr)));
+      if (v.size()==2)
+	return _plot3d(makesequence(g,v.front(),v.back()),contextptr);
+      if (v.size()==1){
+	gen z=v.front();
+	gen G=subst(g,z,x__IDNT_e+cst_i*y__IDNT_e,false,contextptr);
+	return _plot3d(makesequence(G,x__IDNT_e,y__IDNT),contextptr);
+      }
+    }
     if (g.type!=_VECT || g._VECTptr->size()<2)
       return symbolic(at_plot3d,g);
     vecteur v=*g._VECTptr;

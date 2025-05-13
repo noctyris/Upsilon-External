@@ -52,7 +52,9 @@ using namespace std;
 #include <string.h>
 #include <stdexcept>
 #include <algorithm>
-#include <vector>
+#if !defined RTOS_THREADX
+//#include <vector>
+#endif
 #if !defined BESTA_OS && !defined FXCG
 #include <cerrno>
 #endif
@@ -1577,7 +1579,7 @@ namespace giac {
     // 00
     // type 
     // record data
-    if (*ptr!=0xee0bddba)  // ba dd 0b ee
+    if (*((unsigned *)ptr)!=0xee0bddba)  // ba dd 0b ee
       return false; 
     int pos=4; ptr+=4;
     for (;pos<nwstoresize1;){
@@ -3640,6 +3642,7 @@ extern "C" void Sleep(unsigned int miliSecond);
 #endif
   int GAMMA_LIMIT = 100 ;
   int NEWTON_DEFAULT_ITERATION=40;
+  int NEWTON_MAX_RANDOM_RESTART=5;
   int TEST_PROBAB_PRIME=25;
   int GCDHEU_MAXTRY=5;
   int GCDHEU_DEGREE=100;
@@ -3679,6 +3682,11 @@ extern "C" void Sleep(unsigned int miliSecond);
 #endif
   int GAMMA_LIMIT = 100 ;
   int NEWTON_DEFAULT_ITERATION=60;
+#ifdef GIAC_GGB
+  int NEWTON_MAX_RANDOM_RESTART=20;
+#else
+  int NEWTON_MAX_RANDOM_RESTART=5;
+#endif
   int TEST_PROBAB_PRIME=25;
   int GCDHEU_MAXTRY=5;
   int GCDHEU_DEGREE=100;
@@ -5394,6 +5402,34 @@ NULL,NULL,SW_SHOWNORMAL);
     context * ptr = new context;
     *ptr->globalptr = *globalptr;
     return ptr;
+  }
+
+  void clear_context(context * ptr){
+    if (!ptr)
+      return;
+    ptr->parent=0;
+    if (ptr->history_in_ptr)
+      delete ptr->history_in_ptr;
+    if (ptr->history_out_ptr)
+      delete ptr->history_out_ptr;
+    if (ptr->history_plot_ptr)
+      delete ptr->history_plot_ptr;
+    if (ptr->quoted_global_vars)
+      delete ptr->quoted_global_vars;
+    if (ptr->rootofs)
+      delete ptr->rootofs;
+    if (ptr->globalptr)
+      delete ptr->globalptr;
+    if (ptr->tabptr)
+      delete ptr->tabptr;
+    ptr->tabptr=new sym_tab; 
+    ptr->globalcontextptr=ptr; ptr->previous=0; ptr->globalptr=new global; 
+    ptr->quoted_global_vars=new vecteur;
+    ptr->rootofs=new vecteur;
+    ptr->history_in_ptr=new vecteur;
+    ptr->history_out_ptr=new vecteur;
+    ptr->history_plot_ptr=new vecteur;
+    //init_context(ptr);
   }
 
   void init_context(context * ptr){

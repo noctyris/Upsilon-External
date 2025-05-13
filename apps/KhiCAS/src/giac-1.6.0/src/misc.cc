@@ -53,9 +53,10 @@ using namespace std;
 #include "sparse.h"
 #include "giacintl.h"
 #if defined GIAC_HAS_STO_38 || defined NSPIRE || defined NSPIRE_NEWLIB || defined FXCG || defined GIAC_GGB || defined USE_GMP_REPLACEMENTS || defined KHICAS
-inline bool is_graphe(const giac::gen &g,std::string &disp_out,const giac::context *){ return false; }
+inline bool is_graphe(const giac::gen &g){ return false; }
 inline giac::gen _graph_charpoly(const giac::gen &g,const giac::context *){ return g;}
 #else
+#include "signalprocessing.h"
 #include "graphtheory.h"
 #endif
 
@@ -2189,6 +2190,19 @@ namespace giac {
 
   gen _normalize(const gen & a,GIAC_CONTEXT){
     if ( a.type==_STRNG && a.subtype==-1) return  a;
+#if defined GIAC_HAS_STO_38 || defined NSPIRE || defined NSPIRE_NEWLIB || defined FXCG || defined GIAC_GGB || defined USE_GMP_REPLACEMENTS || defined KHICAS || defined EMCC || defined EMCC2
+#else
+#if defined GIAC_LMCHANGES && !defined EMCC && !defined EMCC2 // changes by L. Marohnić
+    audio_clip *clip;
+    if (a.type==_VECT && a.subtype==_SEQ__VECT && a._VECTptr->size()==2 &&
+        (clip=audio_clip::from_gen(a._VECTptr->front()))!=NULL) {
+      if (!is_real_number(a._VECTptr->back(),contextptr))
+        return gentypeerr(contextptr);
+      clip->normalize(to_real_number(a._VECTptr->back(),contextptr).to_double(contextptr));
+      return *clip;
+    }
+#endif
+#endif
     return a/_l2norm(a,contextptr);
   }
   static const char _normalize_s []="normalize";
@@ -2280,8 +2294,10 @@ namespace giac {
   define_unary_function_ptr5( at_eigenvalues ,alias_at_eigenvalues,&__eigenvalues,0,true);
 
   gen _charpoly(const gen & args,GIAC_CONTEXT){
-    string s;
-    if (is_graphe(args.subtype==_SEQ__VECT?args._VECTptr->front():args,s,contextptr))
+    gen arg0=args.type==_VECT && !args._VECTptr->empty() && args.subtype==_SEQ__VECT?args._VECTptr->front():args;
+    if (ckmatrix(arg0))
+      return _pcar(args,contextptr);
+    if (is_graphe(arg0))
       return _graph_charpoly(args,contextptr);
     return _pcar(args,contextptr);
   }
@@ -6140,8 +6156,12 @@ static define_unary_function_eval (__hamdist,&_hamdist,_hamdist_s);
 		decimal_digits(nd,contextptr);
 		return pnt_attrib(gen(res,_GROUP__VECT),attributs,contextptr);
 	      } // end s==2
-	      if (s>=3)
-		v[2]=_floor(v[2],contextptr);
+	      if (s>=3){
+		if (v[2].type==_DOUBLE_ || v[2].type==_FRAC)
+		  v[2]=_floor((b-a)/v[2],contextptr);
+		else
+		  v[2]=_floor(v[2],contextptr);
+	      }
 	      if (s>=3 && v[2].type==_INT_){
 		int n=v[2].val;
 		if (n<1)
@@ -6487,7 +6507,18 @@ static define_unary_function_eval (__os_version,&_os_version,_os_version_s);
 #endif
 
   gen _flatten(const gen & args,GIAC_CONTEXT){
-    if ( args.type==_STRNG && args.subtype==-1) return  args;
+    if (args.type==_STRNG && args.subtype==-1) return  args;
+#if defined GIAC_HAS_STO_38 || defined NSPIRE || defined NSPIRE_NEWLIB || defined FXCG || defined GIAC_GGB || defined USE_GMP_REPLACEMENTS || defined KHICAS || defined EMCC || defined EMCC2
+#else
+#if defined GIAC_LMCHANGES && !defined EMCC && !defined EMCC2 // changes by L. Marohnić
+    rgba_image *img=rgba_image::from_gen(args);
+    if (img!=NULL) {
+      vecteur flv;
+      img->flatten(flv);
+      return flv;
+    }
+#endif
+#endif
     if (args.type!=_VECT) return gensizeerr(contextptr);
     vecteur res;
     aplatir(*args._VECTptr,res,true);
@@ -6557,7 +6588,7 @@ static define_unary_function_eval (__os_version,&_os_version,_os_version_s);
     if (args._STRNGptr->size()>8 && args._STRNGptr->substr(0,8)=="timeout "){
       string t=args._STRNGptr->substr(8,args._STRNGptr->size()-8);
       double f=atof(t.c_str());
-      if (f>=0 && f<24*60){
+      if (f>=0 && f<24*60*60){
 	caseval_maxtime=f;
 	caseval_n=0;
 	caseval_mod=10;
@@ -9277,6 +9308,11 @@ static define_unary_function_eval (__os_version,&_os_version,_os_version_s);
     giac::freeze=true;
   }
 
+  int rgb888to565(int c){
+    int r=(c>>16)&0xff,g=(c>>8)&0xff,b=c&0xff;
+    return (((r*32)/256)<<11) | (((g*64)/256)<<5) | (b*32/256);
+  }
+
   int rgb565to888(int c){
     c &= 0xffff;
     int r=(c>>11)&0x1f,g=(c>>5)&0x3f,b=c&0x1f;
@@ -9428,6 +9464,12 @@ void sync_screen(){}
 
   //Uses the Bresenham line algorithm 
   void draw_line(int x1, int y1, int x2, int y2, int color,GIAC_CONTEXT) {
+    if ( (absint(x1) & 0x7ffff000) ||
+	 (absint(x2) & 0x7ffff000) ||
+	 (absint(y1) & 0x7ffff000) ||
+	 (absint(y2) & 0x7ffff000) 
+	 )
+      return;
     int w =(color & 0x00070000) >> 16;
     ++w;
     int type_line =(color & 0x01c00000) >> 22,mask=0xffff; // 3 bits
@@ -9623,6 +9665,7 @@ void sync_screen(){}
   }
 
   void draw_polygon(vector< vector<int> > & v1,int color,GIAC_CONTEXT){
+    if (v1.empty()) return;
     if (!(v1.back()==v1.front()))
       v1.push_back(v1.front());
     int n=v1.size()-1;
