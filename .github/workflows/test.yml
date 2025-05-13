@@ -1,0 +1,9 @@
+name: Minimal Test
+on:
+  workflow_dispatch:
+jobs:
+  minimal-job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print Hello
+        run: echo "Hello, GitHub Actions!"
