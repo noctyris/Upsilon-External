@@ -11,7 +11,7 @@ jobs:
   #   steps:
   #     - run: sudo apt-get update && sudo apt-get install wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive -y
 
-  #     - uses: actions/checkout@v1
+  #     - uses: actions/checkout@v4
   #       with:
   #         submodules: true
   #     - run: make -C apps/KhiCAS cleanall
@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: sudo apt-get update && sudo apt-get install wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive -y
-      - uses: action/checkout@v1
+      - uses: action/checkout@v4
         with:
           submodules: true
       - run: make Golly_rebuild
@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: sudo apt-get update && sudo apt-get install wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive -y
-      - uses: action/checkout@v1
+      - uses: action/checkout@v4
         with:
           submodules: true
       - run: make Fractal_rebuild
@@ -52,7 +52,7 @@ jobs:
     steps:
       - run: sudo apt-get update && sudo apt-get install wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive -y
 
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v4
         with:
           submodules: true
       - run: make BadApple_rebuild
@@ -66,7 +66,7 @@ jobs:
     steps:
       - run: sudo apt-get update && sudo apt-get install wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive -y
 
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v4
         with:
           submodules: true
       - run: make CHIP-8_rebuild
@@ -80,7 +80,7 @@ jobs:
     steps:
       - run: sudo apt-get update && sudo apt-get install wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive -y
 
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v4
         with:
           submodules: true
       - run: make Example_rebuild
@@ -94,7 +94,7 @@ jobs:
     steps:
       - run: sudo apt-get update && sudo apt-get install wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive -y
 
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v4
         with:
           submodules: true
       - run: make Example-Cpp_rebuild
@@ -108,7 +108,7 @@ jobs:
     steps:
       - run: sudo apt-get update && sudo apt-get install wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive -y
 
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v4
         with:
           submodules: true
       - run: make Flash2Ram_rebuild
@@ -122,7 +122,7 @@ jobs:
     steps:
       - run: sudo apt-get update && sudo apt-get install wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive -y
 
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v4
         with:
           submodules: true
       - run: make HexEdit_rebuild
@@ -136,7 +136,7 @@ jobs:
     steps:
       - run: sudo apt-get update && sudo apt-get install wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive -y
 
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v4
         with:
           submodules: true
       - run: make Nofrendo_rebuild
@@ -150,7 +150,7 @@ jobs:
     steps:
       - run: sudo apt-get update && sudo apt-get install wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive -y
 
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v4
         with:
           submodules: true
       - run: make Peanut-GB_rebuild
@@ -164,7 +164,7 @@ jobs:
     steps:
       - run: sudo apt-get update && sudo apt-get install wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive -y
 
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v4
         with:
           submodules: true
       - run: make Periodic_rebuild
@@ -178,7 +178,7 @@ jobs:
     steps:
       - run: sudo apt-get update && sudo apt-get install wget gdb gcc g++ libgmp-dev libmpfr-dev libmpfi-dev libpari-dev libgsl0-dev libxext-dev libpng-dev libjpeg-dev libreadline-dev libncurses5-dev mesa-common-dev libx11-dev libxt-dev libxft-dev libntl-dev libgl1-mesa-dev libgl-dev libao-dev hevea debhelper libfltk1.3-dev build-essential git imagemagick libx11-dev libxext-dev libfreetype6-dev libpng-dev libjpeg-dev pkg-config gcc-arm-none-eabi binutils-arm-none-eabi dfu-util texinfo autoconf-archive -y
 
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v4
         with:
           submodules: true
       - run: make UnitCircle_rebuild
