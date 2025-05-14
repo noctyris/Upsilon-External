@@ -2,8 +2,9 @@
 
 angular.module('nwas').service('apps', function() {
   return [
-    { name: "Fractal", description: {en: "Fractal generator (W/B)", fr: "Générateur de fractales (N/B)"} },
     { name: "Golly", description: {en: "Game of Life imagined by John Conway", fr: "Jeu de la vie imaginé par John Conway"} },
+    { name: "Fractal", description: {en: "Fractal generator (W/B)", fr: "Générateur de fractales (N/B)"} },
+    { name: "Planets", description: {en: "Planets trajectory", fr: "Trajectoires de planètes"} },
     { name: "KhiCAS", description: {en: "Computer algebra system", fr: "Système de calcul formel"} },
     { name: "Periodic", description: {en: "Periodic table of elements", fr: "Tableau périodique des éléments"} },
     { name: "Nofrendo", description: {en: "NES emulator", fr: "Émulateur NES"} },
