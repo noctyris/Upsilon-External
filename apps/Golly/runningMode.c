@@ -16,7 +16,7 @@ void handleRunningMode(Cell(*cells)[COLUMNS], Cell(*newCells)[COLUMNS], bool *pa
 	    waitForKeyReleased();
             break;
         case SCANCODE_Plus:
-            *speed = (*speed < 10) ? (*speed + 1) : *speed;
+            *speed = (*speed < 5) ? (*speed + 1) : *speed;
             break;
         case SCANCODE_Minus:
             *speed = (*speed > 1) ? (*speed - 1) : *speed;
@@ -61,7 +61,7 @@ void handleRunningMode(Cell(*cells)[COLUMNS], Cell(*newCells)[COLUMNS], bool *pa
         }
     }
 
-    extapp_msleep(-10 * (*speed) + 100);
+    extapp_msleep(-20 * (*speed) + 100);
     (*nGen)++;
 
     *previous_scancode = scancode;
