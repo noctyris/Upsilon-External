@@ -8,7 +8,7 @@ LDFLAGS=-Wl,-L$(API) -Wl,--gc-sections -Wl,--entry=entrypoint --specs=nosys.spec
 %.o: %.c
 	$(CC) $(CFLAGS) -c $<
 
-app.elf: main.o peripherals.o
+app.elf: main.o peripherals.o planets.o
 	$(CC) $^ -o $@ $(CFLAGS) $(LDFLAGS)
 
 clean:
