@@ -1,19 +1,20 @@
 #include "inc/runningMode.h"
 #include "extapp_api.h"
 
-void handleRunningMode(Cell(*cells)[COLUMNS], Cell(*newCells)[COLUMNS], bool *paused, int *speed, int *nGen, uint64_t *previous_scancode)
+void handleRunningMode(Cell (*cells)[COLUMNS], Cell (*newCells)[COLUMNS], bool *paused, int *speed, int *nGen, uint64_t *previous_scancode)
 {
     uint64_t scancode = extapp_scanKeyboard();
-    if (scancode != 0 && scancode != *previous_scancode) {
+    if (scancode != 0 && scancode != *previous_scancode)
+    {
         switch (scancode)
         {
         case SCANCODE_Home:
             *paused = true; // Arrêter la simulation
-            break;
+            return;
         case SCANCODE_Back:
             *paused = true;
             drawCellsColor(cells);
-	    waitForKeyReleased();
+            waitForKeyReleased();
             break;
         case SCANCODE_Plus:
             *speed = (*speed < 5) ? (*speed + 1) : *speed;

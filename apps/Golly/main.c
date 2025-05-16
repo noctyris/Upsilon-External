@@ -14,6 +14,7 @@ void extapp_main(void)
 
     bool running = true;
     bool paused = true;
+    bool isEditingWorld = false;
     int nGen = 0;
     int speed = 1;
     coord_t coord = {ROWS/2, COLUMNS/2};
@@ -39,7 +40,7 @@ void extapp_main(void)
     while (running)
     {
         if (!paused) handleRunningMode(cells, newCells, &paused, &speed, &nGen, &previous_scancode);
-        else handlePausedMode(cells, &coord, &running, &paused, &speed);
+        else handlePausedMode(cells, &coord, &running, &paused, &speed, &isEditingWorld, &previous_scancode);
     }
 
     free(cells);
