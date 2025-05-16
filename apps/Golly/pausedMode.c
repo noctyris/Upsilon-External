@@ -5,13 +5,13 @@
 void handlePausedMode(Cell (*cells)[COLUMNS], coord_t *coord, bool *running, bool *paused, int *speed, bool *isEditingWorld, uint64_t *previous_scancode)
 {
     uint64_t scancode = extapp_scanKeyboard();
-    if (*previous_scancode != scancode && scancode!=0)
+    if (*previous_scancode != scancode && scancode != 0)
     {
         switch (scancode)
         {
         case SCANCODE_Home:
             *running = false; // Quitter le programme
-            break;
+            return;
         case SCANCODE_Back:
             *paused = false; // Démarrer la simulation
             break;
@@ -56,4 +56,35 @@ void handlePausedMode(Cell (*cells)[COLUMNS], coord_t *coord, bool *running, boo
     *previous_scancode = scancode;
 
     extapp_msleep(20);
+}
+
+void handleEditingWorld(Cell (*cells)[COLUMNS], coord_t *coord, bool *running, bool *paused, int *speed, bool *isEditingWorld, uint64_t *previous_scancode)
+{
+    /**
+     * @brief Fonction de gestion du mode édition (Toolbox)
+     * Paramètres modifiables :
+     * - type de monde (fermé, torique, etc.)
+     * - règles de vie (règles de Conway, etc.)
+     * - nombre maximal pour le calcul de couleurs
+    */
+    uint64_t scancode = extapp_scanKeyboard();
+    if (*previous_scancode != scancode && scancode != 0)
+    {
+        switch (scancode)
+        {
+        case SCANCODE_Home:
+            *running = false; // Quitter le programme
+            return;
+        case SCANCODE_Back:
+            *paused = true; // Démarrer la simulation
+            *isEditingWorld = false;
+            break;
+        case SCANCODE_Toolbox:
+            *isEditingWorld = false;
+            break;
+        }
+        *previous_scancode = scancode;
+
+        extapp_msleep(20);
+    }
 }

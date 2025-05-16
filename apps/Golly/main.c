@@ -39,8 +39,9 @@ void extapp_main(void)
 
     while (running)
     {
-        if (!paused) handleRunningMode(cells, newCells, &paused, &speed, &nGen, &previous_scancode);
-        else handlePausedMode(cells, &coord, &running, &paused, &speed, &isEditingWorld, &previous_scancode);
+        if (!paused && !isEditingWorld) handleRunningMode(cells, newCells, &paused, &speed, &nGen, &previous_scancode);
+        else if (paused && !isEditingWorld) handlePausedMode(cells, &coord, &running, &paused, &speed, &isEditingWorld, &previous_scancode);
+        else if (paused && isEditingWorld) handleEditingWorld(cells, &coord, &running, &paused, &speed, &isEditingWorld, &previous_scancode);
     }
 
     free(cells);

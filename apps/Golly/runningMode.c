@@ -13,9 +13,9 @@ void handleRunningMode(Cell (*cells)[COLUMNS], Cell (*newCells)[COLUMNS], bool *
             return;
         case SCANCODE_Back:
             *paused = true;
-            drawCellsColor(cells);
+            drawCellsMono(cells);
             waitForKeyReleased();
-            break;
+            return;
         case SCANCODE_Plus:
             *speed = (*speed < 5) ? (*speed + 1) : *speed;
             break;
